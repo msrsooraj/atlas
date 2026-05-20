@@ -1,17 +1,17 @@
 import { useState } from 'react'
-import { exportTripAsHTML } from '@/lib/exportGenerator'
+import { exportSiteAsHTML } from '@/lib/exportGenerator'
 
 export function useExport() {
   const [isExporting, setIsExporting] = useState(false)
 
-  async function exportTrip(tripId: string): Promise<void> {
+  async function exportSite(): Promise<void> {
     setIsExporting(true)
     try {
-      await exportTripAsHTML(tripId)
+      await exportSiteAsHTML()
     } finally {
       setIsExporting(false)
     }
   }
 
-  return { exportTrip, isExporting }
+  return { exportSite, isExporting }
 }

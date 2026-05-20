@@ -87,10 +87,16 @@ function ShowcaseOrb({
   spot,
   style,
   showPhoto,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   spot: Spot
   style: React.CSSProperties
   showPhoto: boolean
+  onClick: () => void
+  onMouseEnter: () => void
+  onMouseLeave: () => void
 }) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null)
   const urlRef = useRef<string | null>(null)
@@ -119,6 +125,9 @@ function ShowcaseOrb({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.55 }}
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         ...style,
         position: 'absolute',
@@ -128,8 +137,8 @@ function ShowcaseOrb({
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
         boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-        pointerEvents: 'none',
         overflow: 'hidden',
+        cursor: 'pointer',
       }}
     >
       {showPhoto && coverUrl && (
@@ -321,6 +330,9 @@ function MemoryNodeComponent({ data, selected }: NodeProps<MemoryNodeType>) {
                     spot={spot}
                     showPhoto={showcaseShowPhotos}
                     style={{ left: x, top: y, width: orbW, zIndex: 30 }}
+                    onClick={() => openPanelAtSpot(data.locationId, spot.id)}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
                   />
                 )
               })}

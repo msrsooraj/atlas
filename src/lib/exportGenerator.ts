@@ -1,4 +1,4 @@
-import type { Trip, TripLocation, Memory } from '@/types/trip'
+import type { Trip, TripLocation, Spot, Memory, Route } from '@/types/trip'
 import type { CanvasLayout } from '@/types/canvas'
 import { db } from '@/db/db'
 import { blobToDataURL } from './mediaProcessor'
@@ -6,406 +6,783 @@ import { blobToDataURL } from './mediaProcessor'
 interface ExportData {
   trip: Trip
   locations: TripLocation[]
+  spots: Spot[]
   memories: Memory[]
+  routes: Route[]
   layout: CanvasLayout | undefined
-  thumbnails: Record<string, string>
-  originals: Record<string, string>
+  images: Record<string, string>
+  locationCovers: Record<string, string>
+  spotCovers: Record<string, string>
 }
 
-async function collectExportData(tripId: string): Promise<ExportData> {
-  const [trip, locations, memories, layout] = await Promise.all([
+async function collectTripData(tripId: string): Promise<ExportData | null> {
+  const [trip, locations, spots, memories, routes, layout] = await Promise.all([
     db.trips.get(tripId),
     db.locations.where('tripId').equals(tripId).sortBy('order'),
+    db.spots.where('tripId').equals(tripId).toArray(),
     db.memories.where('tripId').equals(tripId).toArray(),
+    db.routes.where('tripId').equals(tripId).sortBy('order'),
     db.canvasLayouts.where('tripId').equals(tripId).first(),
   ])
 
-  if (!trip) throw new Error('Trip not found')
+  if (!trip) return null
 
-  const thumbnails: Record<string, string> = {}
-  const originals: Record<string, string> = {}
+  const keys = new Set<string>()
+  for (const m of memories) {
+    if (m.thumbnailKey) keys.add(m.thumbnailKey)
+    if (m.blobKey) keys.add(m.blobKey)
+  }
 
-  for (const memory of memories) {
-    if (memory.thumbnailKey) {
-      const blob = await db.mediaBlobs.get(memory.thumbnailKey)
-      if (blob) thumbnails[memory.thumbnailKey] = await blobToDataURL(blob.blob)
+  const images: Record<string, string> = {}
+  for (const key of keys) {
+    const rec = await db.mediaBlobs.get(key)
+    if (rec) images[key] = await blobToDataURL(rec.blob)
+  }
+
+  const spotsByLocation: Record<string, Spot[]> = {}
+  for (const s of spots) (spotsByLocation[s.locationId] ??= []).push(s)
+
+  const memoriesBySpot: Record<string, Memory[]> = {}
+  for (const m of memories) {
+    if (m.spotId) (memoriesBySpot[m.spotId] ??= []).push(m)
+  }
+
+  const locationCovers: Record<string, string> = {}
+  for (const loc of locations) {
+    if (loc.coverPhotoId) {
+      const m = await db.memories.get(loc.coverPhotoId)
+      if (m?.thumbnailKey && images[m.thumbnailKey]) { locationCovers[loc.id] = images[m.thumbnailKey]; continue }
     }
-    if (memory.blobKey && memory.type === 'photo') {
-      const blob = await db.mediaBlobs.get(memory.blobKey)
-      if (blob) originals[memory.blobKey] = await blobToDataURL(blob.blob)
+    for (const spot of (spotsByLocation[loc.id] ?? []).sort((a, b) => a.order - b.order)) {
+      const photo = (memoriesBySpot[spot.id] ?? []).find(m => m.type === 'photo' && m.thumbnailKey && images[m.thumbnailKey])
+      if (photo?.thumbnailKey) { locationCovers[loc.id] = images[photo.thumbnailKey]; break }
     }
   }
 
-  return { trip, locations, memories, layout, thumbnails, originals }
+  const spotCovers: Record<string, string> = {}
+  for (const spot of spots) {
+    if (spot.coverPhotoId) {
+      const m = await db.memories.get(spot.coverPhotoId)
+      if (m?.thumbnailKey && images[m.thumbnailKey]) { spotCovers[spot.id] = images[m.thumbnailKey]; continue }
+    }
+    const first = (memoriesBySpot[spot.id] ?? []).find(m => m.type === 'photo' && m.thumbnailKey && images[m.thumbnailKey])
+    if (first?.thumbnailKey) spotCovers[spot.id] = images[first.thumbnailKey]
+  }
+
+  return { trip, locations, spots, memories, routes, layout, images, locationCovers, spotCovers }
 }
 
-function nodePosition(
-  loc: TripLocation,
-  index: number,
-  layout: CanvasLayout | undefined
-): { x: number; y: number } {
-  const n = layout?.nodes.find((n) => n.locationId === loc.id)
-  if (n) return { x: Math.round(n.position.x * 0.45 + 40), y: Math.round(n.position.y * 0.45 + 80) }
-  return { x: index * 340 + 40, y: 80 }
+function serialiseTrip(data: ExportData): string {
+  const { trip, locations, spots, memories, routes, layout, images, locationCovers, spotCovers } = data
+
+  const memoriesStripped = memories.map(m => ({
+    id: m.id, locationId: m.locationId, spotId: m.spotId ?? null,
+    type: m.type, caption: m.caption ?? null,
+    externalUrl: m.externalUrl ?? null,
+    thumb: m.thumbnailKey ? (images[m.thumbnailKey] ?? null) : null,
+    full: m.blobKey ? (images[m.blobKey] ?? null) : (m.thumbnailKey ? (images[m.thumbnailKey] ?? null) : null),
+  }))
+
+  const spotsData = spots.map(s => ({
+    id: s.id, locationId: s.locationId, name: s.name,
+    caption: s.caption ?? null, rating: s.rating ?? null,
+    review: s.review ?? null, dateFrom: s.dateFrom ?? null, dateTo: s.dateTo ?? null,
+    googlePlaceUrl: s.googlePlaceUrl ?? null, order: s.order,
+    cover: spotCovers[s.id] ?? null,
+  }))
+
+  const locData = locations.map(loc => ({
+    id: loc.id, name: loc.name, order: loc.order,
+    caption: loc.caption ?? null, rating: loc.rating ?? null,
+    review: loc.review ?? null, dateFrom: loc.dateFrom ?? null, dateTo: loc.dateTo ?? null,
+    cover: locationCovers[loc.id] ?? null,
+  }))
+
+  const layoutData = layout ? {
+    viewport: layout.viewport,
+    nodes: layout.nodes,
+  } : null
+
+  return JSON.stringify({
+    trip: { id: trip.id, name: trip.name, createdAt: trip.createdAt },
+    locations: locData,
+    spots: spotsData,
+    memories: memoriesStripped,
+    routes: routes.map(r => ({ fromLocationId: r.fromLocationId, toLocationId: r.toLocationId })),
+    layout: layoutData,
+    locationCovers,
+    spotCovers,
+  })
 }
 
-function renderMemories(memories: Memory[], thumbnails: Record<string, string>, originals: Record<string, string>): string {
-  const photos = memories.filter((m) => m.type === 'photo')
-  const notes = memories.filter((m) => m.type === 'note')
-  const links = memories.filter((m) => m.type === 'link')
-
-  const photoHTML = photos.map((m) => {
-    const src = (m.blobKey && originals[m.blobKey]) || (m.thumbnailKey && thumbnails[m.thumbnailKey]) || ''
-    if (!src) return ''
-    return `
-      <div class="photo-item">
-        <img src="${src}" alt="${escapeHtml(m.caption ?? '')}" loading="lazy" onclick="openLightbox(this.src)" />
-        ${m.caption ? `<p class="photo-caption">${escapeHtml(m.caption)}</p>` : ''}
-      </div>`
-  }).join('')
-
-  const notesHTML = notes.map((m) =>
-    `<div class="note-item"><p>${escapeHtml(m.caption ?? '')}</p></div>`
-  ).join('')
-
-  const linksHTML = links.map((m) =>
-    `<a class="link-item" href="${escapeHtml(m.externalUrl ?? '')}" target="_blank" rel="noopener">
-      ${escapeHtml(m.caption || m.externalUrl || '')}
-    </a>`
-  ).join('')
-
-  return `
-    ${photos.length > 0 ? `<div class="photos-section"><div class="photo-grid">${photoHTML}</div></div>` : ''}
-    ${notes.length > 0 ? `<div class="notes-section">${notesHTML}</div>` : ''}
-    ${links.length > 0 ? `<div class="links-section">${linksHTML}</div>` : ''}
-  `
-}
-
-function renderExportHTML(data: ExportData): string {
-  const { trip, locations, memories, layout, thumbnails, originals } = data
-
-  const memoriesByLocation = locations.reduce<Record<string, Memory[]>>((acc, loc) => {
-    acc[loc.id] = memories.filter((m) => m.locationId === loc.id)
-    return acc
-  }, {})
-
-  const canvasWidth = Math.max(
-    1400,
-    ...locations.map((loc, i) => nodePosition(loc, i, layout).x + 360)
-  )
-  const canvasHeight = Math.max(
-    900,
-    ...locations.map((loc, i) => nodePosition(loc, i, layout).y + 500)
-  )
-
-  const nodesHTML = locations.map((loc, i) => {
-    const { x, y } = nodePosition(loc, i, layout)
-    const locMemories = memoriesByLocation[loc.id] ?? []
-    const photos = locMemories.filter((m) => m.type === 'photo')
-    const coverSrc = photos[0]?.thumbnailKey && thumbnails[photos[0].thumbnailKey]
-      ? thumbnails[photos[0].thumbnailKey]
-      : ''
-
-    const previewStrip = photos.slice(0, 3).map((m) => {
-      const src = m.thumbnailKey && thumbnails[m.thumbnailKey] ? thumbnails[m.thumbnailKey] : ''
-      return src ? `<img src="${src}" class="preview-thumb" alt="" />` : ''
-    }).join('')
-
-    const memContent = renderMemories(locMemories, thumbnails, originals)
-    const hasContent = locMemories.length > 0
-
-    return `
-      <div class="node" id="node-${i}" style="left:${x}px;top:${y}px" onclick="toggleNode(this, event)">
-        ${coverSrc ? `
-          <div class="node-cover">
-            <img src="${coverSrc}" alt="" />
-          </div>` : `
-          <div class="node-cover-placeholder">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor" opacity="0.5"/>
-            </svg>
-          </div>`}
-
-        <div class="node-body">
-          <div class="node-header">
-            <div>
-              <div class="node-label">${escapeHtml(loc.name)}</div>
-              <div class="node-meta">${locMemories.length} memor${locMemories.length !== 1 ? 'ies' : 'y'}</div>
-            </div>
-            ${hasContent ? `<span class="expand-icon" aria-hidden="true">+</span>` : ''}
-          </div>
-
-          ${previewStrip ? `<div class="preview-strip">${previewStrip}</div>` : ''}
-        </div>
-
-        ${hasContent ? `
-          <div class="node-expanded">
-            ${memContent}
-          </div>` : ''}
-      </div>`
-  }).join('\n')
-
-  // Route lines as SVG overlay
-  const svgLines = locations.slice(0, -1).map((loc, i) => {
-    const from = nodePosition(loc, i, layout)
-    const to = nodePosition(locations[i + 1]!, i + 1, layout)
-    const fx = from.x + 140
-    const fy = from.y + 200
-    const tx = to.x + 140
-    const ty = to.y + 20
-    const cy = (fy + ty) / 2
-    return `<path d="M${fx},${fy} C${fx},${cy} ${tx},${cy} ${tx},${ty}" stroke="var(--border-strong)" stroke-width="1.5" stroke-dasharray="5 4" fill="none" />`
-  }).join('\n')
+function renderSiteHTML(allData: ExportData[]): string {
+  const allTripsJSON = `[${allData.map(serialiseTrip).join(',\n')}]`
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${escapeHtml(trip.name)} — Atlas</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Atlas — My Journeys</title>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg: #0a0a0f;
-  --surface: rgba(255,255,255,0.05);
-  --surface-raised: rgba(18,18,28,0.95);
-  --border: rgba(255,255,255,0.08);
-  --border-strong: rgba(255,255,255,0.14);
-  --text: #f0ede8;
-  --muted: #9a9a9a;
-  --accent: #f59e0b;
-  --accent-soft: rgba(245,158,11,0.12);
-  --radius: 20px;
-  --dot: rgba(255,255,255,0.06);
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--surface:rgba(255,255,255,.05);--surface-raised:rgba(18,18,28,.97);
+  --border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);
+  --text:#f0ede8;--muted:#9a9a9a;--accent:#f59e0b;--accent-soft:rgba(245,158,11,.12);
+  --radius:20px;--dot:rgba(255,255,255,.05);--shadow:0 4px 24px rgba(0,0,0,.3);
 }
-[data-theme="light"] {
-  --bg: #f5f0e8;
-  --surface: rgba(255,255,255,0.9);
-  --surface-raised: rgba(255,255,255,0.98);
-  --border: rgba(0,0,0,0.08);
-  --border-strong: rgba(0,0,0,0.14);
-  --text: #1a1a1a;
-  --muted: #6b6b6b;
-  --accent: #c1440e;
-  --accent-soft: rgba(193,68,14,0.1);
-  --dot: rgba(0,0,0,0.08);
+[data-theme=light]{
+  --bg:#f5f0e8;--surface:rgba(255,255,255,.9);--surface-raised:rgba(255,255,255,.98);
+  --border:rgba(0,0,0,.08);--border-strong:rgba(0,0,0,.16);
+  --text:#1a1a1a;--muted:#6b6b6b;--accent:#c1440e;--accent-soft:rgba(193,68,14,.1);
+  --dot:rgba(0,0,0,.06);--shadow:0 4px 24px rgba(0,0,0,.1);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+
+/* ── SHARED HEADER ── */
+.site-hdr{
+  position:fixed;top:0;left:0;right:0;z-index:200;height:56px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:0 24px;background:var(--surface-raised);border-bottom:1px solid var(--border);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+.brand{font-size:.68rem;font-weight:800;letter-spacing:.14em;color:var(--accent)}
+.hdr-right{display:flex;align-items:center;gap:6px}
+.hdr-btn{
+  display:flex;align-items:center;gap:5px;padding:5px 12px;
+  background:none;border:1px solid var(--border);border-radius:99px;
+  cursor:pointer;color:var(--muted);font-size:.75rem;transition:.15s;
+}
+.hdr-btn:hover,.hdr-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.hdr-back{
+  display:flex;align-items:center;gap:6px;padding:5px 12px;
+  background:none;border:1px solid var(--border);border-radius:99px;
+  cursor:pointer;color:var(--muted);font-size:.75rem;transition:.15s;
+}
+.hdr-back:hover{border-color:var(--border-strong);color:var(--text)}
+.hdr-sep{width:1px;height:20px;background:var(--border)}
+.hdr-trip-name{font-size:.9rem;font-weight:600;letter-spacing:-.015em;color:var(--text)}
+
+/* ── GALLERY ── */
+#gallery{position:fixed;inset:0;top:56px;overflow-y:auto;display:block}
+#gallery-inner{max-width:1100px;margin:0 auto;padding:40px 24px 80px}
+.gallery-heading{font-size:1.5rem;font-weight:700;letter-spacing:-.03em;color:var(--text);margin-bottom:8px}
+.gallery-sub{font-size:.88rem;color:var(--muted);margin-bottom:32px}
+#trip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.trip-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;transition:transform .18s,border-color .18s,box-shadow .18s;
+  box-shadow:var(--shadow);
+}
+.trip-card:hover{transform:translateY(-3px) scale(1.01);border-color:var(--border-strong);box-shadow:0 8px 40px rgba(0,0,0,.35)}
+.trip-card-cover{height:160px;overflow:hidden;background:var(--accent-soft)}
+.trip-card-cover img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s}
+.trip-card:hover .trip-card-cover img{transform:scale(1.04)}
+.trip-card-cover-ph{
+  height:100%;display:flex;align-items:center;justify-content:center;
+  color:var(--accent);font-size:2.5rem;opacity:.4;
+  background:linear-gradient(135deg,var(--accent-soft),transparent);
+}
+.trip-card-body{padding:14px 18px 18px}
+.trip-card-name{font-size:1rem;font-weight:700;letter-spacing:-.02em;color:var(--text);margin-bottom:5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trip-card-meta{font-size:.72rem;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap}
+.trip-card-dates{font-size:.72rem;color:var(--muted);margin-top:3px;font-style:italic}
+.empty-gallery{
+  text-align:center;padding:80px 24px;color:var(--muted);
+  font-size:.88rem;line-height:1.7;
 }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: auto;
+/* ── VIEWER ── */
+#viewer{position:fixed;inset:0;top:56px;display:none}
+
+/* ── CANVAS MODE ── */
+#canvas-mode{position:absolute;inset:0}
+#canvas-wrap{
+  position:absolute;inset:0;overflow:hidden;cursor:grab;user-select:none;
+  background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);
+  background-size:28px 28px;
 }
+#canvas-wrap.dragging{cursor:grabbing}
+#canvas{position:absolute;top:0;left:0;transform-origin:0 0}
 
-/* Header */
-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  padding: 18px 32px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--surface-raised);
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(20px);
+/* ── NODES ── */
+.node{
+  position:absolute;width:280px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s,transform .15s;
+  box-shadow:var(--shadow);
 }
-.brand { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; color: var(--accent); }
-header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; }
-header p { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-.theme-btn {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  padding: 6px 14px;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 0.75rem;
+.node:hover{transform:translateY(-2px) scale(1.01);border-color:var(--border-strong)}
+.node.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+.node-cover{height:120px;overflow:hidden}
+.node-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.node-cover-ph{height:72px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.node-body{padding:12px 16px 14px}
+.node-name{font-size:.9rem;font-weight:600;color:var(--text);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node-meta{font-size:.7rem;color:var(--muted);margin-top:4px;display:flex;gap:6px}
+
+/* ── SIDE PANEL ── */
+#panel-bd{position:absolute;inset:0;z-index:100;display:none}
+#panel-bd.open{display:block}
+#panel{
+  position:absolute;top:0;right:0;bottom:0;width:400px;z-index:101;
+  display:flex;flex-direction:column;background:var(--surface-raised);
+  border-left:1px solid var(--border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:-8px 0 40px rgba(0,0,0,.2);
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.17,.84,.44,1);
 }
+#panel.open{transform:translateX(0)}
+#panel-hdr{padding:18px 18px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+#panel-body{flex:1;overflow-y:auto;padding:18px 18px 40px}
+.pnl-close{position:absolute;top:16px;right:16px;background:var(--surface);border:1px solid var(--border);
+  border-radius:99px;width:28px;height:28px;cursor:pointer;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;font-size:.9rem}
+.pnl-loc-name{font-size:1rem;font-weight:700;letter-spacing:-.02em;color:var(--text);padding-right:36px}
+.pnl-caption{font-size:.8rem;color:var(--muted);font-style:italic;margin-top:5px;line-height:1.55}
+.pnl-review{font-size:.82rem;color:var(--text);line-height:1.6;margin-top:8px}
+.pnl-meta-row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.pnl-date{font-size:.72rem;color:var(--muted)}
+.stars{color:var(--accent);font-size:.8rem;letter-spacing:1px}
+.star-empty{opacity:.25}
+.sec-label{font-size:.65rem;font-weight:700;letter-spacing:.1em;color:var(--muted);margin:16px 0 8px}
+.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:12px}
+.photo-grid.three{grid-template-columns:1fr 1fr 1fr}
+.photo-wrap{position:relative;cursor:zoom-in}
+.photo-wrap img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:6px;transition:opacity .15s}
+.photo-wrap img:hover{opacity:.88}
+.photo-cap{font-size:.68rem;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.note-card{background:var(--accent-soft);border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:.82rem;color:var(--text);line-height:1.6}
+.link-card{display:block;padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;text-decoration:none;font-size:.78rem;color:var(--accent);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px}
+.spot-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px;background:var(--surface)}
+.spot-hdr{padding:11px 14px;background:var(--surface-raised);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.spot-icon{width:26px;height:26px;border-radius:50%;background:var(--accent-soft);border:1px solid var(--accent);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.spot-name{font-size:.86rem;font-weight:600;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spot-glink{display:flex;align-items:center;gap:3px;padding:3px 8px;background:var(--accent-soft);
+  border:1px solid var(--accent);border-radius:99px;text-decoration:none;font-size:.65rem;color:var(--accent);font-weight:600;flex-shrink:0}
+.spot-body{padding:12px 14px}
 
-/* Canvas */
-.canvas-wrap { overflow: auto; position: relative; }
-.canvas {
-  position: relative;
-  width: ${canvasWidth}px;
-  height: ${canvasHeight}px;
-  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1px);
-  background-size: 28px 28px;
+/* ── ALBUM MODE ── */
+#album-mode{
+  position:absolute;inset:0;overflow-y:auto;display:none;
+  background:var(--bg);
 }
-.canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#album-inner{max-width:760px;margin:0 auto;padding:28px 20px 80px}
+.alb-section{border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;margin-bottom:24px}
+.alb-sec-hdr{padding:18px 22px 16px;background:var(--surface-raised);border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px}
+.alb-pin{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);border:1px solid var(--accent);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.alb-sec-info{flex:1}
+.alb-sec-name{font-size:1.05rem;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+.alb-sec-body{padding:14px 22px 18px}
+.alb-spot-hdr{display:flex;align-items:center;gap:10px;margin:14px 0 8px}
+.alb-spot-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.alb-spot-name{font-size:.84rem;font-weight:600;color:var(--text)}
+.alb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-bottom:6px}
+.alb-photo{position:relative;cursor:zoom-in}
+.alb-photo img{width:100%;aspect-ratio:1;object-fit:cover;display:block;border-radius:7px;transition:opacity .15s}
+.alb-photo img:hover{opacity:.88}
+.alb-photo-cap{position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.55));
+  font-size:.6rem;color:#fff;border-radius:0 0 7px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty-notice{font-size:.78rem;color:var(--muted);font-style:italic;text-align:center;padding:20px 0}
 
-/* Node */
-.node {
-  position: absolute;
-  width: 280px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  backdrop-filter: blur(16px);
-  overflow: hidden;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.2);
-}
-.node:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); border-color: var(--border-strong); }
-.node.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), 0 8px 32px rgba(0,0,0,0.3); }
-
-.node-cover { height: 110px; overflow: hidden; }
-.node-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.node-cover-placeholder { height: 64px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; color: var(--accent); }
-
-.node-body { padding: 14px 16px 16px; }
-.node-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.node-label { font-size: 0.9rem; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-.node-meta { font-size: 0.7rem; color: var(--accent); margin-top: 3px; font-weight: 500; }
-.expand-icon { font-size: 1.1rem; color: var(--muted); flex-shrink: 0; transition: transform 0.2s; user-select: none; }
-.node.active .expand-icon { transform: rotate(45deg); color: var(--accent); }
-
-.preview-strip { display: flex; gap: 3px; margin-top: 10px; border-radius: 8px; overflow: hidden; }
-.preview-thumb { width: 33.33%; aspect-ratio: 1; object-fit: cover; display: block; flex: 1; }
-
-/* Expanded content */
-.node-expanded { display: none; border-top: 1px solid var(--border); padding: 16px; }
-.node.active .node-expanded { display: block; }
-
-.photos-section { margin-bottom: 12px; }
-.photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-.photo-item { position: relative; }
-.photo-item img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; border-radius: 6px; cursor: zoom-in; transition: opacity 0.15s; }
-.photo-item img:hover { opacity: 0.9; }
-.photo-caption { font-size: 0.7rem; color: var(--muted); margin-top: 4px; padding: 0 2px; }
-
-.notes-section { margin-bottom: 10px; }
-.note-item { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
-.note-item p { font-size: 0.82rem; color: var(--text); line-height: 1.6; }
-
-.links-section { display: flex; flex-direction: column; gap: 6px; }
-.link-item { display: block; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; text-decoration: none; font-size: 0.78rem; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Lightbox */
-#lightbox {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.9);
-  z-index: 9999;
-  align-items: center;
-  justify-content: center;
-  cursor: zoom-out;
-  padding: 32px;
-}
-#lightbox.open { display: flex; }
-#lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
-
-/* Footer */
-footer { padding: 24px 32px; color: var(--muted); font-size: 0.75rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; }
-footer a { color: var(--accent); text-decoration: none; }
-
-/* Hint */
-.hint {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  padding: 8px 18px;
-  font-size: 0.75rem;
-  color: var(--muted);
-  backdrop-filter: blur(12px);
-  pointer-events: none;
-  animation: fadeout 4s 3s forwards;
-}
-@keyframes fadeout { to { opacity: 0; } }
+/* ── LIGHTBOX ── */
+#lb{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);
+  display:none;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out}
+#lb.open{display:flex}
+#lb-img{max-width:90vw;max-height:85vh;object-fit:contain;border-radius:10px;display:block}
+#lb-cap{margin-top:10px;font-size:.82rem;color:rgba(255,255,255,.65);max-width:600px;text-align:center;line-height:1.5}
+#lb-count{margin-top:6px;font-size:.7rem;color:rgba(255,255,255,.35)}
+.lb-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.2);border-radius:99px;width:38px;height:38px;
+  cursor:pointer;color:#fff;font-size:1.4rem;display:flex;align-items:center;justify-content:center;z-index:10000}
+.lb-nav:disabled{opacity:.2;cursor:default}
+#lb-prev{left:16px}#lb-next{right:16px}
+#lb-close{position:fixed;top:16px;right:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  border-radius:99px;width:34px;height:34px;cursor:pointer;color:#fff;font-size:.95rem;
+  display:flex;align-items:center;justify-content:center;z-index:10000}
 </style>
 </head>
 <body>
 
-<header>
-  <div>
+<!-- Shared header -->
+<header class="site-hdr">
+  <div style="display:flex;align-items:center;gap:14px">
     <div class="brand">ATLAS</div>
-    <h1>${escapeHtml(trip.name)}</h1>
-    <p>${locations.length} location${locations.length !== 1 ? 's' : ''} · ${new Date(trip.createdAt).toLocaleDateString()}</p>
+    <button class="hdr-back" id="back-btn" onclick="backToGallery()" style="display:none">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      All Journeys
+    </button>
+    <span class="hdr-trip-name" id="viewer-title" style="display:none"></span>
   </div>
-  <button class="theme-btn" onclick="toggleTheme()">Toggle theme</button>
+  <div class="hdr-right" id="hdr-controls">
+    <!-- Gallery controls -->
+    <div id="gallery-controls">
+      <button class="hdr-btn" onclick="toggleTheme()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <!-- Viewer controls -->
+    <div id="viewer-controls" style="display:none;align-items:center;gap:6px">
+      <button class="hdr-btn active" id="btn-canvas" onclick="setMode('canvas')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Canvas
+      </button>
+      <button class="hdr-btn" id="btn-album" onclick="setMode('album')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+        Photo Reel
+      </button>
+      <div class="hdr-sep"></div>
+      <button class="hdr-btn" onclick="toggleTheme()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
 </header>
 
-<div class="canvas-wrap">
-  <div class="canvas">
-    <svg><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--border-strong)"/></marker></defs>
-    ${svgLines}
-    </svg>
-    ${nodesHTML}
+<!-- Gallery section -->
+<div id="gallery">
+  <div id="gallery-inner">
+    <h1 class="gallery-heading">My Journeys</h1>
+    <p class="gallery-sub">Click a journey to explore it.</p>
+    <div id="trip-grid"></div>
   </div>
+</div>
+
+<!-- Viewer section -->
+<div id="viewer">
+  <div id="canvas-mode">
+    <div id="canvas-wrap">
+      <div id="canvas"></div>
+    </div>
+    <div id="panel-bd" onclick="handleBdClick(event)">
+      <div id="panel">
+        <button class="pnl-close" onclick="closePanel()">×</button>
+        <div id="panel-hdr"></div>
+        <div id="panel-body"></div>
+      </div>
+    </div>
+  </div>
+  <div id="album-mode"></div>
 </div>
 
 <!-- Lightbox -->
-<div id="lightbox" onclick="closeLightbox()">
-  <img id="lightbox-img" src="" alt="" />
+<div id="lb" onclick="lbClickOutside(event)">
+  <button class="lb-nav" id="lb-prev" onclick="lbNav(-1,event)">‹</button>
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <img id="lb-img" src="" alt=""/>
+    <div id="lb-cap"></div>
+    <div id="lb-count"></div>
+  </div>
+  <button class="lb-nav" id="lb-next" onclick="lbNav(1,event)">›</button>
+  <button id="lb-close" onclick="closeLb()">×</button>
 </div>
 
-<div class="hint">Click any location to expand its memories</div>
-
-<footer>
-  <span>Exported from Atlas</span>
-  <a href="https://github.com" onclick="return false;">Made with Atlas</a>
-</footer>
-
 <script>
-function toggleNode(el, event) {
-  if (event.target.closest('a')) return;
-  const wasActive = el.classList.contains('active');
+const ALL_TRIPS = ${allTripsJSON};
+
+// Active trip state
+let DATA = null;
+let locMap = {}, spotsByLoc = {}, memsByLoc = {}, memsBySpot = {};
+let albumBuilt = false;
+
+// Pan/zoom state
+let tx = 60, ty = 60, sc = 0.9;
+let dragging = false, lx = 0, ly = 0;
+
+// Lightbox state
+let lbPhotos = [], lbIdx = 0;
+window.lbCurrent = [];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function starsHTML(r) {
+  if (!r) return '';
+  return '<span class="stars">'+'★'.repeat(r)+'<span class="star-empty">'+'☆'.repeat(5-r)+'</span></span>';
+}
+function dateRng(from, to) {
+  if (!from && !to) return '';
+  const fmt = ts => new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  if (from && !to) return fmt(from);
+  if (!from && to) return 'Until '+fmt(to);
+  return fmt(from)+' – '+fmt(to);
+}
+function getNodePos(locationId, index) {
+  if (!DATA || !DATA.layout) return { x: index * 380 + 60, y: 100 };
+  const n = (DATA.layout.nodes ?? []).find(n => n.locationId === locationId);
+  return n ? n.position : { x: index * 380 + 60, y: 100 };
+}
+
+// ── Lookups ───────────────────────────────────────────────────────────────────
+function initLookups() {
+  locMap = Object.fromEntries(DATA.locations.map(l => [l.id, l]));
+  spotsByLoc = {}; memsByLoc = {}; memsBySpot = {};
+  DATA.spots.forEach(s => { (spotsByLoc[s.locationId] ??= []).push(s); });
+  DATA.memories.forEach(m => {
+    (memsByLoc[m.locationId] ??= []).push(m);
+    if (m.spotId) (memsBySpot[m.spotId] ??= []).push(m);
+  });
+}
+
+// ── Gallery ───────────────────────────────────────────────────────────────────
+function buildGallery() {
+  const grid = document.getElementById('trip-grid');
+  if (!ALL_TRIPS.length) {
+    grid.innerHTML = '<div class="empty-gallery">No journeys in this export.</div>';
+    return;
+  }
+  grid.innerHTML = ALL_TRIPS.map((t, i) => {
+    const coverLocId = t.locations[0]?.id;
+    const cover = coverLocId ? t.locationCovers[coverLocId] : null;
+    const locCount = t.locations.length;
+    const photoCount = t.memories.filter(m => m.type === 'photo').length;
+    const allTs = t.locations.flatMap(l => [l.dateFrom, l.dateTo]).filter(Boolean).sort((a,b) => a-b);
+    const dateStr = allTs.length ? dateRng(allTs[0], allTs[allTs.length-1]) : '';
+    return '<div class="trip-card" onclick="openTrip('+i+')">'
+      +'<div class="trip-card-cover">'+(cover ? '<img src="'+cover+'" alt=""/>' : '<div class="trip-card-cover-ph">✦</div>')+'</div>'
+      +'<div class="trip-card-body">'
+      +'<div class="trip-card-name">'+esc(t.trip.name)+'</div>'
+      +'<div class="trip-card-meta">'
+      +'<span>'+locCount+' location'+(locCount!==1?'s':'')+'</span>'
+      +(photoCount ? '<span>· '+photoCount+' photo'+(photoCount!==1?'s':'')+'</span>' : '')
+      +'</div>'
+      +(dateStr ? '<div class="trip-card-dates">'+esc(dateStr)+'</div>' : '')
+      +'</div></div>';
+  }).join('');
+}
+
+// ── Trip viewer ───────────────────────────────────────────────────────────────
+function openTrip(idx) {
+  DATA = ALL_TRIPS[idx];
+  initLookups();
+  albumBuilt = false;
+  document.getElementById('album-mode').innerHTML = '';
+
+  document.getElementById('viewer-title').textContent = DATA.trip.name;
+  document.getElementById('viewer-title').style.display = '';
+  document.getElementById('back-btn').style.display = '';
+  document.getElementById('gallery').style.display = 'none';
+  document.getElementById('viewer').style.display = 'block';
+  document.getElementById('gallery-controls').style.display = 'none';
+  document.getElementById('viewer-controls').style.display = 'flex';
+
+  renderCanvas();
+  setMode('canvas');
+  closePanel();
+}
+
+function backToGallery() {
+  closePanel();
+  closeLb();
+  DATA = null;
+  document.getElementById('viewer').style.display = 'none';
+  document.getElementById('gallery').style.display = 'block';
+  document.getElementById('back-btn').style.display = 'none';
+  document.getElementById('viewer-title').style.display = 'none';
+  document.getElementById('gallery-controls').style.display = '';
+  document.getElementById('viewer-controls').style.display = 'none';
+}
+
+// ── Canvas rendering ──────────────────────────────────────────────────────────
+const canvasEl = document.getElementById('canvas');
+const wrap = document.getElementById('canvas-wrap');
+
+function renderCanvas() {
+  const { locations, locationCovers } = DATA;
+  const positions = locations.map((l, i) => getNodePos(l.id, i));
+  const maxX = Math.max(1800, ...positions.map(p => p.x + 500));
+  const maxY = Math.max(1000, ...positions.map(p => p.y + 400));
+  canvasEl.style.width = maxX + 'px';
+  canvasEl.style.height = maxY + 'px';
+
+  // SVG routes
+  const routeIdx = Object.fromEntries(locations.map((l, i) => [l.id, i]));
+  let svgPaths = '';
+  (DATA.routes ?? []).forEach(r => {
+    const fi = routeIdx[r.fromLocationId];
+    const ti = routeIdx[r.toLocationId];
+    if (fi === undefined || ti === undefined) return;
+    const fp = getNodePos(r.fromLocationId, fi);
+    const tp = getNodePos(r.toLocationId, ti);
+    const fx = fp.x+140, fy = fp.y+186, tx2 = tp.x+140, ty2 = tp.y, cy = (fy+ty2)/2;
+    svgPaths += '<path d="M'+fx+','+fy+' C'+fx+','+cy+' '+tx2+','+cy+' '+tx2+','+ty2+'" stroke="var(--border-strong)" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>';
+  });
+
+  // Nodes
+  const pinSVG = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor" opacity=".5"/></svg>';
+  let nodesHTML = '';
+  locations.forEach((loc, i) => {
+    const pos = getNodePos(loc.id, i);
+    const cover = locationCovers[loc.id];
+    const locSpots = (spotsByLoc[loc.id] ?? []).length;
+    const memCount = (memsByLoc[loc.id] ?? []).length;
+    nodesHTML += '<div class="node" id="nd-'+esc(loc.id)+'" style="left:'+pos.x+'px;top:'+pos.y+'px" data-lid="'+esc(loc.id)+'">'
+      +(cover ? '<div class="node-cover"><img src="'+cover+'" alt=""/></div>' : '<div class="node-cover-ph">'+pinSVG+'</div>')
+      +'<div class="node-body">'
+      +'<div class="node-name">'+esc(loc.name)+'</div>'
+      +'<div class="node-meta">'
+      +'<span>'+memCount+' memor'+(memCount!==1?'ies':'y')+'</span>'
+      +(locSpots ? '<span>· '+locSpots+' spot'+(locSpots!==1?'s':'')+'</span>' : '')
+      +'</div></div></div>';
+  });
+
+  canvasEl.innerHTML = '<svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible">'+svgPaths+'</svg>'+nodesHTML;
+
+  document.querySelectorAll('.node').forEach(node => {
+    node.addEventListener('click', () => openPanel(node.dataset.lid));
+  });
+
+  const vp = DATA.layout?.viewport ?? { x: 60, y: 60, zoom: 0.9 };
+  tx = vp.x; ty = vp.y; sc = vp.zoom;
+  applyT();
+}
+
+// ── Pan / Zoom ────────────────────────────────────────────────────────────────
+function applyT() {
+  canvasEl.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+sc+')';
+}
+
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = wrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const delta = e.deltaY < 0 ? 1.08 : 0.93;
+  const nsc = Math.max(0.08, Math.min(5, sc * delta));
+  tx = mx - (mx - tx) * (nsc / sc);
+  ty = my - (my - ty) * (nsc / sc);
+  sc = nsc; applyT();
+}, { passive: false });
+
+wrap.addEventListener('mousedown', e => {
+  if (e.target.closest('.node')) return;
+  dragging = true; lx = e.clientX; ly = e.clientY;
+  wrap.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  tx += e.clientX-lx; ty += e.clientY-ly; lx = e.clientX; ly = e.clientY; applyT();
+});
+window.addEventListener('mouseup', () => { dragging = false; wrap.classList.remove('dragging'); });
+
+// ── Panel ─────────────────────────────────────────────────────────────────────
+let activeNode = null;
+function openPanel(lid) {
+  const loc = locMap[lid]; if (!loc) return;
+  activeNode = lid;
   document.querySelectorAll('.node.active').forEach(n => n.classList.remove('active'));
-  if (!wasActive) el.classList.add('active');
+  const el = document.getElementById('nd-'+lid);
+  if (el) el.classList.add('active');
+
+  const mems = memsByLoc[lid] ?? [];
+  const ungrouped = mems.filter(m => !m.spotId);
+  const locSpots = (spotsByLoc[lid] ?? []).slice().sort((a,b) => a.order - b.order);
+
+  let hdr = '<div style="display:flex;align-items:flex-start;gap:10px">';
+  hdr += '<div class="alb-pin" style="flex-shrink:0;margin-top:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="var(--accent)"/></svg></div>';
+  hdr += '<div style="flex:1;min-width:0"><div class="pnl-loc-name">'+esc(loc.name)+'</div>';
+  if (loc.caption) hdr += '<div class="pnl-caption">'+esc(loc.caption)+'</div>';
+  let meta = '';
+  if (loc.rating) meta += starsHTML(loc.rating);
+  const dr = dateRng(loc.dateFrom, loc.dateTo);
+  if (dr) meta += '<span class="pnl-date">'+esc(dr)+'</span>';
+  if (meta) hdr += '<div class="pnl-meta-row">'+meta+'</div>';
+  if (loc.review) hdr += '<div class="pnl-review">'+esc(loc.review)+'</div>';
+  hdr += '</div></div>';
+  document.getElementById('panel-hdr').innerHTML = hdr;
+
+  let body = '';
+  const allLbPhotos = [];
+
+  const ugPhotos = ungrouped.filter(m => m.type === 'photo' && m.thumb);
+  if (ugPhotos.length) {
+    body += '<div class="sec-label">PHOTOS</div><div class="photo-grid">';
+    ugPhotos.forEach(m => {
+      const idx = allLbPhotos.length; allLbPhotos.push(m);
+      body += '<div class="photo-wrap" onclick="openLb('+idx+',lbCurrent)"><img src="'+m.thumb+'" alt="'+(m.caption?esc(m.caption):'')+'"/>'+(m.caption?'<div class="photo-cap">'+esc(m.caption)+'</div>':'')+'</div>';
+    });
+    body += '</div>';
+  }
+
+  const ugNotes = ungrouped.filter(m => m.type === 'note');
+  const ugLinks = ungrouped.filter(m => m.type === 'link');
+  if (ugNotes.length || ugLinks.length) {
+    body += '<div class="sec-label">NOTES & LINKS</div>';
+    ugNotes.forEach(m => { body += '<div class="note-card">'+esc(m.caption??'')+'</div>'; });
+    ugLinks.forEach(m => { body += '<a class="link-card" href="'+esc(m.externalUrl??'')+'" target="_blank" rel="noopener">'+esc(m.caption||m.externalUrl||'')+'</a>'; });
+  }
+
+  if (locSpots.length) {
+    body += '<div class="sec-label">SPOTS</div>';
+    locSpots.forEach(spot => {
+      const spotMems = memsBySpot[spot.id] ?? [];
+      const spotPhotos = spotMems.filter(m => m.type === 'photo' && m.thumb);
+      body += '<div class="spot-card"><div class="spot-hdr">';
+      body += '<div class="spot-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="var(--accent)"/></svg></div>';
+      body += '<span class="spot-name">'+esc(spot.name)+'</span>';
+      if (spot.googlePlaceUrl) body += '<a class="spot-glink" href="'+esc(spot.googlePlaceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Google</a>';
+      body += '</div><div class="spot-body">';
+      if (spot.caption) body += '<div style="font-style:italic;font-size:.8rem;color:var(--muted);margin-bottom:8px">'+esc(spot.caption)+'</div>';
+      let smeta = '';
+      if (spot.rating) smeta += starsHTML(spot.rating);
+      const sdr = dateRng(spot.dateFrom, spot.dateTo);
+      if (sdr) smeta += '<span class="pnl-date">'+esc(sdr)+'</span>';
+      if (smeta) body += '<div class="pnl-meta-row" style="margin-bottom:8px">'+smeta+'</div>';
+      if (spot.review) body += '<div class="pnl-review" style="margin-bottom:8px">'+esc(spot.review)+'</div>';
+      if (spotPhotos.length) {
+        body += '<div class="photo-grid three">';
+        spotPhotos.forEach(m => {
+          const idx = allLbPhotos.length; allLbPhotos.push(m);
+          body += '<div class="photo-wrap" onclick="openLb('+idx+',lbCurrent)"><img src="'+m.thumb+'" alt="'+(m.caption?esc(m.caption):'')+'"/>'+(m.caption?'<div class="photo-cap">'+esc(m.caption)+'</div>':'')+'</div>';
+        });
+        body += '</div>';
+      }
+      body += '</div></div>';
+    });
+  }
+
+  window.lbCurrent = allLbPhotos;
+  document.getElementById('panel-body').innerHTML = body;
+  document.getElementById('panel-bd').classList.add('open');
+  document.getElementById('panel').classList.add('open');
 }
 
-function openLightbox(src) {
+function closePanel() {
+  document.getElementById('panel-bd').classList.remove('open');
+  document.getElementById('panel').classList.remove('open');
+  if (activeNode) {
+    const el = document.getElementById('nd-'+activeNode);
+    if (el) el.classList.remove('active');
+    activeNode = null;
+  }
+}
+function handleBdClick(e) {
+  if (!e.target.closest('#panel')) closePanel();
+}
+
+// ── Album ─────────────────────────────────────────────────────────────────────
+function buildAlbum() {
+  if (albumBuilt) return; albumBuilt = true;
+  const allAlbumPhotos = [];
+  let html = '';
+  DATA.locations.forEach(loc => {
+    const locSpots = (spotsByLoc[loc.id] ?? []).slice().sort((a,b) => a.order - b.order);
+    const ungrouped = (memsByLoc[loc.id] ?? []).filter(m => !m.spotId && m.type==='photo' && m.thumb);
+    const hasContent = ungrouped.length > 0 || locSpots.some(s => (memsBySpot[s.id]??[]).some(m => m.type==='photo' && m.thumb));
+    if (!hasContent) return;
+    html += '<div class="alb-section"><div class="alb-sec-hdr">';
+    html += '<div class="alb-pin"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="var(--accent)"/></svg></div>';
+    html += '<div class="alb-sec-info"><div class="alb-sec-name">'+esc(loc.name)+'</div>';
+    let smeta = '';
+    if (loc.rating) smeta += starsHTML(loc.rating);
+    const dr = dateRng(loc.dateFrom, loc.dateTo);
+    if (dr) smeta += '<span class="pnl-date">'+esc(dr)+'</span>';
+    if (smeta) html += '<div class="pnl-meta-row" style="margin-top:5px">'+smeta+'</div>';
+    if (loc.caption) html += '<div class="pnl-caption">'+esc(loc.caption)+'</div>';
+    if (loc.review) html += '<div class="pnl-review">'+esc(loc.review)+'</div>';
+    html += '</div></div><div class="alb-sec-body">';
+    if (ungrouped.length) {
+      html += '<div class="alb-grid">';
+      ungrouped.forEach(m => {
+        const idx = allAlbumPhotos.length; allAlbumPhotos.push(m);
+        html += '<div class="alb-photo" onclick="openLb('+idx+',albPhotos)"><img src="'+m.thumb+'" alt=""/>'+(m.caption?'<div class="alb-photo-cap">'+esc(m.caption)+'</div>':'')+'</div>';
+      });
+      html += '</div>';
+    }
+    locSpots.forEach(spot => {
+      const sPhotos = (memsBySpot[spot.id]??[]).filter(m => m.type==='photo' && m.thumb);
+      if (!sPhotos.length) return;
+      html += '<div class="alb-spot-hdr"><div class="alb-spot-dot"></div><div class="alb-spot-name">'+esc(spot.name)+'</div>';
+      if (spot.rating) html += starsHTML(spot.rating);
+      html += '</div>';
+      if (spot.caption) html += '<div style="font-size:.78rem;color:var(--muted);font-style:italic;margin-bottom:8px">'+esc(spot.caption)+'</div>';
+      html += '<div class="alb-grid">';
+      sPhotos.forEach(m => {
+        const idx = allAlbumPhotos.length; allAlbumPhotos.push(m);
+        html += '<div class="alb-photo" onclick="openLb('+idx+',albPhotos)"><img src="'+m.thumb+'" alt=""/>'+(m.caption?'<div class="alb-photo-cap">'+esc(m.caption)+'</div>':'')+'</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+  if (!html) html = '<div class="empty-notice">No photos in this journey.</div>';
+  window.albPhotos = allAlbumPhotos;
+  document.getElementById('album-mode').innerHTML = '<div id="album-inner">'+html+'</div>';
+}
+
+// ── Mode switching ─────────────────────────────────────────────────────────────
+function setMode(mode) {
+  const isCanvas = mode === 'canvas';
+  document.getElementById('canvas-mode').style.display = isCanvas ? 'block' : 'none';
+  document.getElementById('album-mode').style.display = isCanvas ? 'none' : 'block';
+  document.getElementById('btn-canvas').classList.toggle('active', isCanvas);
+  document.getElementById('btn-album').classList.toggle('active', !isCanvas);
+  if (!isCanvas) { buildAlbum(); closePanel(); }
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+function openLb(idx, photos) {
   event.stopPropagation();
-  document.getElementById('lightbox-img').src = src;
-  document.getElementById('lightbox').classList.add('open');
+  lbPhotos = photos; lbIdx = idx;
+  showLbPhoto();
+  document.getElementById('lb').classList.add('open');
 }
-
-function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('open');
+function showLbPhoto() {
+  const m = lbPhotos[lbIdx];
+  document.getElementById('lb-img').src = m.full || m.thumb || '';
+  document.getElementById('lb-cap').textContent = m.caption || '';
+  document.getElementById('lb-count').textContent = (lbIdx+1)+' / '+lbPhotos.length;
+  document.getElementById('lb-prev').disabled = lbIdx === 0;
+  document.getElementById('lb-next').disabled = lbIdx === lbPhotos.length - 1;
 }
+function lbNav(dir, e) { e.stopPropagation(); lbIdx = Math.max(0, Math.min(lbPhotos.length-1, lbIdx+dir)); showLbPhoto(); }
+function closeLb() { document.getElementById('lb').classList.remove('open'); }
+function lbClickOutside(e) { if (!e.target.closest('#lb-img')) closeLb(); }
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    closeLightbox();
-    document.querySelectorAll('.node.active').forEach(n => n.classList.remove('active'));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeLb(); closePanel(); }
+  if (document.getElementById('lb').classList.contains('open')) {
+    if (e.key === 'ArrowLeft') lbNav(-1, e);
+    if (e.key === 'ArrowRight') lbNav(1, e);
   }
 });
 
+// ── Theme ──────────────────────────────────────────────────────────────────────
 function toggleTheme() {
-  const html = document.documentElement;
-  html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  const h = document.documentElement;
+  h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark';
 }
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+buildGallery();
 </script>
 </body>
 </html>`
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-}
+export async function exportSiteAsHTML(): Promise<void> {
+  const trips = await db.trips.orderBy('createdAt').toArray()
+  if (!trips.length) throw new Error('No journeys to export')
 
-export async function exportTripAsHTML(tripId: string): Promise<void> {
-  const data = await collectExportData(tripId)
-  const html = renderExportHTML(data)
+  const allData: ExportData[] = []
+  for (const trip of trips) {
+    const data = await collectTripData(trip.id)
+    if (data) allData.push(data)
+  }
+
+  const html = renderSiteHTML(allData)
   const blob = new Blob([html], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
+  const date = new Date().toISOString().split('T')[0]
   a.href = url
-  a.download = `${data.trip.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-atlas.html`
+  a.download = `atlas-journeys-${date}.html`
   a.click()
   URL.revokeObjectURL(url)
 }

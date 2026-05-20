@@ -23,7 +23,7 @@ export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
   const toggleShowcasePhotos = useUIStore((s) => s.toggleShowcasePhotos)
   const activeTripId = useTripStore((s) => s.activeTripId)
   const setActiveTripId = useTripStore((s) => s.setActiveTripId)
-  const { exportTrip, isExporting } = useExport()
+  const { exportSite, isExporting } = useExport()
   const { deleteTrip } = useTrip()
   const { exportBackup, importBackup, resolveConflict, pendingConflict, setPendingConflict, isExporting: isBackupExporting, isImporting } = useBackup()
   const isIdle = useIdleHide()
@@ -76,7 +76,7 @@ export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
             transition={{ type: 'spring', stiffness: 340, damping: 26 }}
             style={{
               position: 'absolute',
-              bottom: 'calc(100% + 10px)',
+              top: 'calc(100% + 10px)',
               left: '50%',
               transform: 'translateX(-50%)',
               background: 'var(--surface-raised)',
@@ -204,17 +204,20 @@ export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
           boxShadow: 'var(--shadow-md)',
         }}
       >
-        <span
+        <a
+          href="/#/"
+          title="Back to home"
           style={{
             fontSize: '0.8rem',
             fontWeight: 700,
             letterSpacing: '0.08em',
             color: 'var(--accent)',
             marginRight: 4,
+            textDecoration: 'none',
           }}
         >
           ATLAS
-        </span>
+        </a>
 
         {tripName && (
           <>
@@ -347,30 +350,28 @@ export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
           </svg>
         </ToolbarButton>
 
-        {activeTripId && (
-          <>
-            <ToolbarButton
-              onClick={() => exportTrip(activeTripId)}
-              title="Export as HTML (shareable)"
-              disabled={isExporting}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </ToolbarButton>
+        <ToolbarButton
+          onClick={() => exportSite().then(() => showToast('Site exported', true)).catch((e) => showToast(e?.message ?? 'Export failed', false))}
+          title="Export site — all journeys as one HTML file"
+          disabled={isExporting}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </ToolbarButton>
 
-            <ToolbarButton
-              onClick={() => exportBackup(activeTripId).then(() => showToast('Backup saved', true)).catch(() => showToast('Backup failed', false))}
-              title="Save backup (.atlas)"
-              disabled={isBackupExporting}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points="7 3 7 8 15 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </ToolbarButton>
-          </>
+        {activeTripId && (
+          <ToolbarButton
+            onClick={() => exportBackup(activeTripId).then(() => showToast('Backup saved', true)).catch(() => showToast('Backup failed', false))}
+            title="Save backup (.atlas)"
+            disabled={isBackupExporting}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="7 3 7 8 15 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </ToolbarButton>
         )}
 
         {/* Hidden file input for import */}
