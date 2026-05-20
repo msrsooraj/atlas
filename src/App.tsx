@@ -97,7 +97,7 @@ function AppCanvas() {
         )}
       </AnimatePresence>
 
-      {appMode === 'scrapbook' && <NodeDetailPanel />}
+      {(appMode === 'scrapbook' || appMode === 'showcase') && <NodeDetailPanel />}
       <TripCreationModal />
 
       <AnimatePresence>
