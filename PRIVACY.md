@@ -44,4 +44,4 @@ If this policy changes, the updated version will be committed to the repository 
 
 ## Contact
 
-Open an issue on the GitHub repository if you have questions.
+Open an issue at https://github.com/msrsooraj/atlas/issues if you have questions.

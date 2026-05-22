@@ -39,7 +39,7 @@ A local-first travel journal that lives entirely in your browser. Build a visual
 **Prerequisites:** Node.js 18 or later, npm
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/atlas.git
+git clone https://github.com/msrsooraj/atlas.git
 cd atlas
 npm install
 npm run dev
@@ -54,7 +54,7 @@ Open [http://localhost:5173](http://localhost:5173).
 **Prerequisites:** Docker and Docker Compose
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/atlas.git
+git clone https://github.com/msrsooraj/atlas.git
 cd atlas
 docker compose up dev
 ```
