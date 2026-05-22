@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useUIStore, type AppMode } from '@/store/uiStore'
+import { useUIStore, type AppMode, type HeatmapMode } from '@/store/uiStore'
+import { useCanvasStore, type ArrangeMode } from '@/store/canvasStore'
 import { useExport } from '@/hooks/useExport'
 import { useTrip } from '@/hooks/useTrip'
 import { useBackup } from '@/hooks/useBackup'
@@ -15,12 +16,13 @@ interface CanvasToolbarProps {
 
 export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
   const openCreationModal = useUIStore((s) => s.openCreationModal)
-  const toggleTheme = useUIStore((s) => s.toggleTheme)
-  const theme = useUIStore((s) => s.theme)
+  const openSettingsPanel = useUIStore((s) => s.openSettingsPanel)
   const appMode = useUIStore((s) => s.appMode)
+  const arrangeMode = useCanvasStore((s) => s.arrangeMode)
+  const cycleArrangeMode = useCanvasStore((s) => s.cycleArrangeMode)
+  const heatmapMode = useUIStore((s) => s.heatmapMode)
+  const setHeatmapMode = useUIStore((s) => s.setHeatmapMode)
   const setAppMode = useUIStore((s) => s.setAppMode)
-  const showcaseShowPhotos = useUIStore((s) => s.showcaseShowPhotos)
-  const toggleShowcasePhotos = useUIStore((s) => s.toggleShowcasePhotos)
   const activeTripId = useTripStore((s) => s.activeTripId)
   const setActiveTripId = useTripStore((s) => s.setActiveTripId)
   const { exportSite, isExporting } = useExport()
@@ -316,33 +318,61 @@ export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
           </motion.button>
         ))}
 
-        {/* Showcase-only: photo toggle */}
-        {appMode === 'showcase' && (
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.92 }}
-            onClick={toggleShowcasePhotos}
-            title={showcaseShowPhotos ? 'Hide photos in orbs' : 'Show photos in orbs'}
-            style={{
-              background: showcaseShowPhotos ? 'var(--accent-soft)' : 'none',
-              border: showcaseShowPhotos ? '1px solid var(--accent)' : '1px solid transparent',
-              cursor: 'pointer',
-              color: showcaseShowPhotos ? 'var(--accent)' : 'var(--text-secondary)',
-              padding: '4px',
-              borderRadius: 6,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'color var(--transition), background var(--transition)',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
-              <path d="M3 17l4-4 3 3 4-5 4 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-            </svg>
-          </motion.button>
-        )}
-
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+        {appMode === 'showcase' && (
+          <>
+            {(
+              [
+                { mode: 'none' as HeatmapMode, title: 'Equal size', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="7" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="2" />
+                    <rect x="13" y="7" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="2" />
+                  </svg>
+                )},
+                { mode: 'rating' as HeatmapMode, title: 'Size by rating', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )},
+                { mode: 'time' as HeatmapMode, title: 'Size by time spent', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                    <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )},
+                { mode: 'aggregate' as HeatmapMode, title: 'Size by rating + time', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )},
+              ] as const
+            ).map(({ mode, title, icon }) => (
+              <motion.button
+                key={mode}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => setHeatmapMode(mode)}
+                title={title}
+                style={{
+                  background: heatmapMode === mode ? 'var(--accent-soft)' : 'none',
+                  border: heatmapMode === mode ? '1px solid var(--accent)' : '1px solid transparent',
+                  cursor: 'pointer',
+                  color: heatmapMode === mode ? 'var(--accent)' : 'var(--text-secondary)',
+                  padding: '4px',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color var(--transition), background var(--transition)',
+                }}
+              >
+                {icon}
+              </motion.button>
+            ))}
+            <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+          </>
+        )}
 
         <ToolbarButton onClick={openCreationModal} title="New journey">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
@@ -394,29 +424,69 @@ export function CanvasToolbar({ tripName }: CanvasToolbarProps) {
           </svg>
         </ToolbarButton>
 
-        <ToolbarButton onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-          {theme === 'dark' ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="2" />
-              <path
-                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
+        {appMode !== 'album' && (
+          <>
+            <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+            {(
+              [
+                { mode: 'manual' as ArrangeMode, nextTitle: 'Auto-arrange (grid)', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2" />
+                    <rect x="15" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2" />
+                    <rect x="9" y="15" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="2" />
+                    <path d="M6 9v3h12V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <line x1="12" y1="12" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )},
+                { mode: 'grid' as ArrangeMode, nextTitle: 'Switch to line layout', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <circle cx="4" cy="12" r="2" fill="currentColor" />
+                    <circle cx="12" cy="12" r="2" fill="currentColor" />
+                    <circle cx="20" cy="12" r="2" fill="currentColor" />
+                    <line x1="6" y1="12" x2="10" y2="12" stroke="currentColor" strokeWidth="1.5" />
+                    <line x1="14" y1="12" x2="18" y2="12" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                )},
+                { mode: 'line' as ArrangeMode, nextTitle: 'Reset layout', icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 7h11a5 5 0 010 10H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M7 3L3 7l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )},
+              ] as const
+            ).map(({ mode, nextTitle, icon }) => arrangeMode === mode && (
+              <motion.button
+                key={mode}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.92 }}
+                onClick={cycleArrangeMode}
+                title={nextTitle}
+                style={{
+                  background: mode !== 'manual' ? 'var(--accent-soft)' : 'none',
+                  border: mode !== 'manual' ? '1px solid var(--accent)' : '1px solid transparent',
+                  cursor: 'pointer',
+                  color: mode !== 'manual' ? 'var(--accent)' : 'var(--text-secondary)',
+                  padding: '4px',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color var(--transition), background var(--transition)',
+                }}
+              >
+                {icon}
+              </motion.button>
+            ))}
+          </>
+        )}
+
+        <ToolbarButton onClick={openSettingsPanel} title="Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </ToolbarButton>
+
       </div>
       {/* Toast */}
       <AnimatePresence>

@@ -76,7 +76,10 @@ function serialiseTrip(data: ExportData): string {
   const { trip, locations, spots, memories, routes, layout, images, locationCovers, spotCovers } = data
 
   const memoriesStripped = memories.map(m => ({
-    id: m.id, locationId: m.locationId, spotId: m.spotId ?? null,
+    id: m.id,
+    locationId: m.locationId ?? null,
+    spotId: m.spotId ?? null,
+    routeId: m.routeId ?? null,
     type: m.type, caption: m.caption ?? null,
     externalUrl: m.externalUrl ?? null,
     thumb: m.thumbnailKey ? (images[m.thumbnailKey] ?? null) : null,
@@ -108,7 +111,7 @@ function serialiseTrip(data: ExportData): string {
     locations: locData,
     spots: spotsData,
     memories: memoriesStripped,
-    routes: routes.map(r => ({ fromLocationId: r.fromLocationId, toLocationId: r.toLocationId })),
+    routes: routes.map(r => ({ id: r.id, fromLocationId: r.fromLocationId, toLocationId: r.toLocationId, transport: r.transport ?? null, caption: r.caption ?? null, order: r.order })),
     layout: layoutData,
     locationCovers,
     spotCovers,
@@ -212,10 +215,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 .node{
   position:absolute;width:280px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s,transform .15s;
-  box-shadow:var(--shadow);
+  overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s,transform .3s;
+  box-shadow:var(--shadow);transform:scale(var(--hs,1));transform-origin:top left;
 }
-.node:hover{transform:translateY(-2px) scale(1.01);border-color:var(--border-strong)}
+.node:hover{transform:scale(var(--hs,1)) translateY(-2px);border-color:var(--border-strong)}
 .node.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
 .node-cover{height:120px;overflow:hidden}
 .node-cover img{width:100%;height:100%;object-fit:cover;display:block}
@@ -307,6 +310,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   border-radius:99px;width:34px;height:34px;cursor:pointer;color:#fff;font-size:.95rem;
   display:flex;align-items:center;justify-content:center;z-index:10000}
 </style>
+<style id="heat-style"></style>
 </head>
 <body>
 
@@ -336,6 +340,25 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
       <button class="hdr-btn" id="btn-album" onclick="setMode('album')">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
         Photo Reel
+      </button>
+      <div class="hdr-sep"></div>
+      <div id="heat-btns" style="display:none;align-items:center;gap:3px">
+        <button class="hdr-btn" id="heat-none" onclick="setHeatmapMode('none')" title="Equal size">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="13" y="7" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <button class="hdr-btn active" id="heat-rating" onclick="setHeatmapMode('rating')" title="Size by rating">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="hdr-btn" id="heat-time" onclick="setHeatmapMode('time')" title="Size by time spent">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="hdr-btn" id="heat-agg" onclick="setHeatmapMode('aggregate')" title="Rating + time">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <button class="hdr-btn" id="btn-arrange" onclick="cycleArrange()" style="display:none" title="Cycle layout">
+        <svg id="arrange-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/><rect x="15" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/><rect x="9" y="15" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/><path d="M6 9v3h12V9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="12" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span id="arrange-label">Grid</span>
       </button>
       <div class="hdr-sep"></div>
       <button class="hdr-btn" onclick="toggleTheme()">
@@ -421,13 +444,15 @@ function getNodePos(locationId, index) {
 }
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
+let memsByRoute = {};
 function initLookups() {
   locMap = Object.fromEntries(DATA.locations.map(l => [l.id, l]));
-  spotsByLoc = {}; memsByLoc = {}; memsBySpot = {};
+  spotsByLoc = {}; memsByLoc = {}; memsBySpot = {}; memsByRoute = {};
   DATA.spots.forEach(s => { (spotsByLoc[s.locationId] ??= []).push(s); });
   DATA.memories.forEach(m => {
-    (memsByLoc[m.locationId] ??= []).push(m);
+    if (m.locationId) (memsByLoc[m.locationId] ??= []).push(m);
     if (m.spotId) (memsBySpot[m.spotId] ??= []).push(m);
+    if (m.routeId) (memsByRoute[m.routeId] ??= []).push(m);
   });
 }
 
@@ -476,6 +501,7 @@ function openTrip(idx) {
   renderCanvas();
   setMode('canvas');
   closePanel();
+  applyHeatmap();
 }
 
 function backToGallery() {
@@ -502,17 +528,39 @@ function renderCanvas() {
   canvasEl.style.width = maxX + 'px';
   canvasEl.style.height = maxY + 'px';
 
-  // SVG routes
+  // SVG routes — dynamic handle selection matching the app behaviour
   const routeIdx = Object.fromEntries(locations.map((l, i) => [l.id, i]));
+  const TRANSPORT_ICONS = {flight:'✈️',bus:'🚌',car:'🚗',train:'🚂',boat:'⛵',cruise:'🛳️',walk:'🚶',other:'🗺️'};
+  const NW=280, NH=180;
+  function edgePoints(fp, tp) {
+    const dx=(tp.x+NW/2)-(fp.x+NW/2), dy=(tp.y+NH/2)-(fp.y+NH/2);
+    if(Math.abs(dx)>=Math.abs(dy)) {
+      return dx>=0
+        ? {sx:fp.x+NW,sy:fp.y+NH/2,tx:tp.x,ty:tp.y+NH/2}
+        : {sx:fp.x,sy:fp.y+NH/2,tx:tp.x+NW,ty:tp.y+NH/2};
+    }
+    return dy>=0
+      ? {sx:fp.x+NW/2,sy:fp.y+NH,tx:tp.x+NW/2,ty:tp.y}
+      : {sx:fp.x+NW/2,sy:fp.y,tx:tp.x+NW/2,ty:tp.y+NH};
+  }
   let svgPaths = '';
+  let routeBadgesHTML = '';
   (DATA.routes ?? []).forEach(r => {
     const fi = routeIdx[r.fromLocationId];
     const ti = routeIdx[r.toLocationId];
     if (fi === undefined || ti === undefined) return;
     const fp = getNodePos(r.fromLocationId, fi);
     const tp = getNodePos(r.toLocationId, ti);
-    const fx = fp.x+140, fy = fp.y+186, tx2 = tp.x+140, ty2 = tp.y, cy = (fy+ty2)/2;
-    svgPaths += '<path d="M'+fx+','+fy+' C'+fx+','+cy+' '+tx2+','+cy+' '+tx2+','+ty2+'" stroke="var(--border-strong)" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>';
+    const {sx,sy,tx2:ex,ty2:ey} = (({sx,sy,tx:tx2,ty:ty2})=>({sx,sy,tx2,ty2}))(edgePoints(fp,tp));
+    const cx=(sx+ex)/2, cy2=(sy+ey)/2;
+    svgPaths += '<path d="M'+sx+','+sy+' C'+((sx+cx)/1.4+cx/3.6)+','+sy+' '+((ex+cx)/1.4+cx/3.6)+','+ey+' '+ex+','+ey+'" stroke="var(--border-strong)" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>';
+    // Route badge
+    const routePhotos = (memsByRoute[r.id] ?? []).filter(m => m.type==='photo');
+    const icon = r.transport ? TRANSPORT_ICONS[r.transport] : null;
+    if (icon || routePhotos.length) {
+      const badge = (icon ? '<span style="font-size:.82rem">'+icon+'</span>' : '') + (routePhotos.length ? '<span style="color:var(--accent);font-weight:600;font-size:.68rem">'+routePhotos.length+'</span>' : '');
+      routeBadgesHTML += '<div style="position:absolute;left:'+(cx-28)+'px;top:'+(cy2-11)+'px;background:var(--surface-raised);border:1px solid var(--border);border-radius:99px;padding:3px 9px;display:flex;align-items:center;gap:4px;backdrop-filter:blur(12px);pointer-events:none">'+badge+'</div>';
+    }
   });
 
   // Nodes
@@ -533,7 +581,7 @@ function renderCanvas() {
       +'</div></div></div>';
   });
 
-  canvasEl.innerHTML = '<svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible">'+svgPaths+'</svg>'+nodesHTML;
+  canvasEl.innerHTML = '<svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible">'+svgPaths+'</svg>'+routeBadgesHTML+nodesHTML;
 
   document.querySelectorAll('.node').forEach(node => {
     node.addEventListener('click', () => openPanel(node.dataset.lid));
@@ -710,6 +758,31 @@ function buildAlbum() {
       html += '</div>';
     });
     html += '</div></div>';
+
+    // Transit section: outgoing route from this location
+    const outRoute = (DATA.routes ?? []).find(r => r.fromLocationId === loc.id);
+    if (outRoute) {
+      const toLocName = locMap[outRoute.toLocationId]?.name;
+      const routePhotos = (memsByRoute[outRoute.id] ?? []).filter(m => m.type==='photo' && m.thumb);
+      const TICONS = {flight:'✈️',bus:'🚌',car:'🚗',train:'🚂',boat:'⛵',cruise:'🛳️',walk:'🚶',other:'🗺️'};
+      if (outRoute.transport || outRoute.caption || routePhotos.length) {
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;margin:0 4px">';
+        html += '<div style="flex:1;height:1px;background:var(--border)"></div>';
+        if (outRoute.transport) html += '<span style="font-size:1.1rem">'+TICONS[outRoute.transport]+'</span>';
+        if (toLocName) html += '<span style="font-size:.7rem;color:var(--muted)">→ '+esc(toLocName)+'</span>';
+        html += '<div style="flex:1;height:1px;background:var(--border)"></div>';
+        html += '</div>';
+        if (outRoute.caption) html += '<div style="font-size:.78rem;color:var(--muted);font-style:italic;text-align:center;padding:0 8px 8px">'+esc(outRoute.caption)+'</div>';
+        if (routePhotos.length) {
+          html += '<div class="alb-grid" style="margin-bottom:16px">';
+          routePhotos.forEach(m => {
+            const idx = allAlbumPhotos.length; allAlbumPhotos.push(m);
+            html += '<div class="alb-photo" onclick="openLb('+idx+',albPhotos)"><img src="'+m.thumb+'" alt=""/>'+(m.caption?'<div class="alb-photo-cap">'+esc(m.caption)+'</div>':'')+'</div>';
+          });
+          html += '</div>';
+        }
+      }
+    }
   });
   if (!html) html = '<div class="empty-notice">No photos in this journey.</div>';
   window.albPhotos = allAlbumPhotos;
@@ -723,6 +796,8 @@ function setMode(mode) {
   document.getElementById('album-mode').style.display = isCanvas ? 'none' : 'block';
   document.getElementById('btn-canvas').classList.toggle('active', isCanvas);
   document.getElementById('btn-album').classList.toggle('active', !isCanvas);
+  document.getElementById('heat-btns').style.display = isCanvas ? 'flex' : 'none';
+  document.getElementById('btn-arrange').style.display = isCanvas ? '' : 'none';
   if (!isCanvas) { buildAlbum(); closePanel(); }
 }
 
@@ -752,6 +827,114 @@ document.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') lbNav(1, e);
   }
 });
+
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+let heatmapMode = 'rating';
+function computeHeatScales() {
+  if (!DATA || heatmapMode === 'none') return {};
+  const msPerDay = 86400000;
+  const timeOf = it => (it.dateFrom && it.dateTo) ? Math.max(0, (it.dateTo - it.dateFrom) / msPerDay) : 0;
+  const items = [...DATA.locations, ...DATA.spots];
+  let raws;
+  if (heatmapMode === 'rating') {
+    raws = items.map(it => it.rating ?? 0);
+  } else if (heatmapMode === 'time') {
+    raws = items.map(timeOf);
+  } else {
+    const ratings = items.map(it => it.rating ?? 0);
+    const times = items.map(timeOf);
+    const maxR = Math.max(...ratings, 1), maxT = Math.max(...times, 1);
+    raws = items.map((_, i) => ratings[i] / maxR + times[i] / maxT);
+  }
+  const min = Math.min(...raws), max = Math.max(...raws);
+  const scales = {};
+  items.forEach((it, i) => { scales[it.id] = min === max ? 1 : 0.5 + (raws[i] - min) / (max - min) * 1.0; });
+  return scales;
+}
+function applyHeatmap() {
+  if (!DATA) return;
+  const scales = computeHeatScales();
+  let css = '';
+  DATA.locations.forEach(loc => {
+    const s = (scales[loc.id] ?? 1).toFixed(3);
+    css += '#nd-' + loc.id + '{--hs:' + s + '}';
+    css += '#nd-' + loc.id + ':hover{transform:scale(' + s + ') translateY(-2px)}';
+  });
+  document.getElementById('heat-style').textContent = css;
+}
+function setHeatmapMode(mode) {
+  heatmapMode = mode;
+  const modeToId = { none:'heat-none', rating:'heat-rating', time:'heat-time', aggregate:'heat-agg' };
+  ['heat-none','heat-rating','heat-time','heat-agg'].forEach(id => {
+    document.getElementById(id).classList.toggle('active', modeToId[mode] === id);
+  });
+  applyHeatmap();
+}
+
+// ── Auto-arrange ──────────────────────────────────────────────────────────────
+let exportArrangeMode = 'manual';
+let savedLayoutNodes = null;
+
+function arrangeTopoOrder() {
+  const locs = DATA.locations, routes = DATA.routes ?? [];
+  const incoming = {}, outgoing = {};
+  locs.forEach(l => { incoming[l.id] = 0; outgoing[l.id] = []; });
+  routes.forEach(r => {
+    incoming[r.toLocationId] = (incoming[r.toLocationId] ?? 0) + 1;
+    if (outgoing[r.fromLocationId]) outgoing[r.fromLocationId].push(r.toLocationId);
+  });
+  const queue = locs.filter(l => (incoming[l.id] ?? 0) === 0).map(l => l.id);
+  const order = [], visited = new Set();
+  while (queue.length) {
+    const id = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id); order.push(id);
+    (outgoing[id] ?? []).forEach(next => { incoming[next]--; if (incoming[next] === 0) queue.push(next); });
+  }
+  locs.forEach(l => { if (!visited.has(l.id)) order.push(l.id); });
+  return order;
+}
+
+function applyArrangeLayout(mode) {
+  const locs = DATA.locations, H = 380, V = 260, order = arrangeTopoOrder(), posMap = {};
+  if (mode === 'grid') {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(order.length)));
+    order.forEach((id, i) => { const col = i % cols, row = Math.floor(i / cols); posMap[id] = { x: row % 2 === 0 ? col * H + 80 : (cols - 1 - col) * H + 80, y: row * V + 80 }; });
+  } else {
+    order.forEach((id, i) => { posMap[id] = { x: i * H + 80, y: 80 }; });
+  }
+  if (!DATA.layout) DATA.layout = { nodes: [], viewport: { x: 60, y: 60, zoom: 0.9 } };
+  DATA.layout.nodes = locs.map(l => ({ locationId: l.id, position: posMap[l.id] ?? { x: 0, y: 0 }, width: 280, height: 180, zIndex: 1 }));
+  renderCanvas(); applyHeatmap();
+  const positions = locs.map((l, i) => getNodePos(l.id, i)), pad = 80;
+  const minX = Math.min(...positions.map(p => p.x)) - pad, minY = Math.min(...positions.map(p => p.y)) - pad;
+  const maxX = Math.max(...positions.map(p => p.x + 280)) + pad, maxY = Math.max(...positions.map(p => p.y + 180)) + pad;
+  const wRect = wrap.getBoundingClientRect();
+  sc = Math.min(wRect.width / (maxX - minX), wRect.height / (maxY - minY), 1.5);
+  tx = wRect.width / 2 - (minX + (maxX - minX) / 2) * sc;
+  ty = wRect.height / 2 - (minY + (maxY - minY) / 2) * sc;
+  applyT();
+}
+
+function cycleArrange() {
+  if (!DATA) return;
+  const cycle = ['manual', 'grid', 'line'];
+  const next = cycle[(cycle.indexOf(exportArrangeMode) + 1) % cycle.length];
+  if (exportArrangeMode === 'manual') {
+    savedLayoutNodes = DATA.layout ? JSON.parse(JSON.stringify(DATA.layout.nodes)) : null;
+  }
+  if (next === 'manual') {
+    if (savedLayoutNodes && DATA.layout) DATA.layout.nodes = savedLayoutNodes;
+    renderCanvas(); applyHeatmap();
+    savedLayoutNodes = null;
+  } else {
+    applyArrangeLayout(next);
+  }
+  exportArrangeMode = next;
+  const labels = { manual: 'Grid', grid: 'Line', line: 'Reset' };
+  document.getElementById('arrange-label').textContent = labels[next];
+  document.getElementById('btn-arrange').classList.toggle('active', next !== 'manual');
+}
 
 // ── Theme ──────────────────────────────────────────────────────────────────────
 function toggleTheme() {

@@ -8,6 +8,8 @@ import { useTripStore } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
 import { TripCanvas } from '@/components/canvas/TripCanvas'
 import { NodeDetailPanel } from '@/components/panels/NodeDetailPanel'
+import { RoutePanel } from '@/components/panels/RoutePanel'
+import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import { TripCreationModal } from '@/components/creation/TripCreationModal'
 import { AlbumView } from '@/components/views/AlbumView'
 import { LandingPage } from '@/pages/LandingPage'
@@ -98,6 +100,8 @@ function AppCanvas() {
       </AnimatePresence>
 
       {(appMode === 'scrapbook' || appMode === 'showcase') && <NodeDetailPanel />}
+      {appMode === 'scrapbook' && <RoutePanel />}
+      <SettingsPanel />
       <TripCreationModal />
 
       <AnimatePresence>

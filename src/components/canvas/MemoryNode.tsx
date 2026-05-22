@@ -1,5 +1,12 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps, type Node } from '@xyflow/react'
+
+const ALL_POSITIONS = [
+  { id: 'top',    pos: Position.Top    },
+  { id: 'right',  pos: Position.Right  },
+  { id: 'bottom', pos: Position.Bottom },
+  { id: 'left',   pos: Position.Left   },
+] as const
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { MemoryNodeData } from '@/types/canvas'
@@ -87,6 +94,7 @@ function ShowcaseOrb({
   spot,
   style,
   showPhoto,
+  heatScale,
   onClick,
   onMouseEnter,
   onMouseLeave,
@@ -94,6 +102,7 @@ function ShowcaseOrb({
   spot: Spot
   style: React.CSSProperties
   showPhoto: boolean
+  heatScale: number
   onClick: () => void
   onMouseEnter: () => void
   onMouseLeave: () => void
@@ -121,9 +130,9 @@ function ShowcaseOrb({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.55 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.55 }}
+      initial={{ opacity: 0, scale: 0.55 * heatScale }}
+      animate={{ opacity: 1, scale: heatScale }}
+      exit={{ opacity: 0, scale: 0.55 * heatScale }}
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
@@ -139,6 +148,7 @@ function ShowcaseOrb({
         boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
         overflow: 'hidden',
         cursor: 'pointer',
+        transformOrigin: 'center center',
       }}
     >
       {showPhoto && coverUrl && (
@@ -166,10 +176,13 @@ function ShowcaseOrb({
 }
 
 // ─── Main MemoryNode ──────────────────────────────────────────────────────────
-function MemoryNodeComponent({ data, selected }: NodeProps<MemoryNodeType>) {
+function MemoryNodeComponent({ id, data, selected }: NodeProps<MemoryNodeType>) {
   const { openPanel, openPanelAtSpot } = useCanvasStore()
   const appMode = useUIStore((s) => s.appMode)
   const showcaseShowPhotos = useUIStore((s) => s.showcaseShowPhotos)
+  const heatmapMode = useUIStore((s) => s.heatmapMode)
+  const heatmapScales = useUIStore((s) => s.heatmapScales)
+  const { setNodes } = useReactFlow()
 
   const [coverURL, setCoverURL] = useState<string | null>(null)
   const [isHovered, setIsHovered] = useState(false)
@@ -237,14 +250,21 @@ function MemoryNodeComponent({ data, selected }: NodeProps<MemoryNodeType>) {
     hideTimerRef.current = setTimeout(() => setIsHovered(false), 120)
   }, [])
 
+  useEffect(() => {
+    setNodes((ns) => ns.map((n) => n.id === id ? { ...n, zIndex: isHovered ? 1000 : 1 } : n))
+  }, [isHovered, id, setNodes])
+
   const isShowcase = appMode === 'showcase'
   const hasSpots = spots && spots.length > 0
   const orbW = showcaseShowPhotos ? 152 : 148
   const orbH = showcaseShowPhotos ? 110 : 60
+  const nodeHeatScale = isShowcase && heatmapMode !== 'none' ? (heatmapScales[data.locationId] ?? 1.0) : 1.0
 
   return (
     <>
-      <Handle type="target" position={Position.Top} style={{ opacity: 0, pointerEvents: 'none' }} />
+      {ALL_POSITIONS.map(({ id, pos }) => (
+        <Handle key={`t-${id}`} type="target" id={id} position={pos} style={{ opacity: 0, pointerEvents: 'none' }} />
+      ))}
 
       <div style={{ position: 'relative', width: 280 }}>
 
@@ -324,11 +344,13 @@ function MemoryNodeComponent({ data, selected }: NodeProps<MemoryNodeType>) {
                 const cx = 140, cy = 90
                 const x = cx + radius * Math.cos(angle) - orbW / 2
                 const y = cy + radius * Math.sin(angle) - orbH / 2
+                const spotHeatScale = isShowcase && heatmapMode !== 'none' ? (heatmapScales[spot.id] ?? 1.0) : 1.0
                 return (
                   <ShowcaseOrb
                     key={spot.id}
                     spot={spot}
                     showPhoto={showcaseShowPhotos}
+                    heatScale={spotHeatScale}
                     style={{ left: x, top: y, width: orbW, zIndex: 30 }}
                     onClick={() => openPanelAtSpot(data.locationId, spot.id)}
                     onMouseEnter={handleMouseEnter}
@@ -343,7 +365,7 @@ function MemoryNodeComponent({ data, selected }: NodeProps<MemoryNodeType>) {
         {/* ── Main node card ─────────────────────────────────────────────── */}
         <motion.div
           initial={{ scale: 0.85, opacity: 0 }}
-          animate={{ scale: isShowcase && isHovered ? 1.04 : 1, opacity: 1 }}
+          animate={{ scale: nodeHeatScale * (isShowcase && isHovered ? 1.04 : 1.0), opacity: 1 }}
           transition={{ type: 'spring', stiffness: 300, damping: 24 }}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
@@ -412,7 +434,9 @@ function MemoryNodeComponent({ data, selected }: NodeProps<MemoryNodeType>) {
         </motion.div>
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0, pointerEvents: 'none' }} />
+      {ALL_POSITIONS.map(({ id, pos }) => (
+        <Handle key={`s-${id}`} type="source" id={id} position={pos} style={{ opacity: 0, pointerEvents: 'none' }} />
+      ))}
     </>
   )
 }

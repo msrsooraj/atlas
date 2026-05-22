@@ -4,6 +4,54 @@ import type { Memory } from '@/types/trip'
 import { generateThumbnail, isImageFile } from '@/lib/mediaProcessor'
 
 export function useMedia() {
+  async function uploadRouteFiles(
+    files: File[],
+    routeId: string,
+    tripId: string
+  ): Promise<Memory[]> {
+    const now = Date.now()
+    const memories: Memory[] = []
+
+    for (const file of files) {
+      const memoryId = nanoid()
+      const blobKey = `blob-${memoryId}`
+      let thumbnailKey: string | undefined
+      let type: Memory['type'] = 'note'
+
+      if (isImageFile(file)) {
+        type = 'photo'
+        const thumbKey = `thumb-${memoryId}`
+        const thumbnail = await generateThumbnail(file)
+        await db.mediaBlobs.add({ key: thumbKey, blob: thumbnail, mimeType: 'image/jpeg' })
+        thumbnailKey = thumbKey
+      } else if (file.type.startsWith('video/')) {
+        type = 'video'
+      } else if (file.type.startsWith('audio/')) {
+        type = 'audio'
+      }
+
+      await db.mediaBlobs.add({ key: blobKey, blob: file, mimeType: file.type })
+
+      const memory: Memory = {
+        id: memoryId,
+        routeId,
+        tripId,
+        type,
+        blobKey,
+        thumbnailKey,
+        mimeType: file.type,
+        fileName: file.name,
+        fileSize: file.size,
+        createdAt: now,
+      }
+
+      await db.memories.add(memory)
+      memories.push(memory)
+    }
+
+    return memories
+  }
+
   async function uploadFiles(
     files: File[],
     locationId: string,
@@ -110,5 +158,5 @@ export function useMedia() {
     return URL.createObjectURL(blob.blob)
   }
 
-  return { uploadFiles, addNote, addLink, updateCaption, deleteMemory, getBlobURL }
+  return { uploadFiles, uploadRouteFiles, addNote, addLink, updateCaption, deleteMemory, getBlobURL }
 }

@@ -1,4 +1,5 @@
 export type MemoryType = 'photo' | 'video' | 'audio' | 'note' | 'link'
+export type TransportMode = 'flight' | 'bus' | 'car' | 'train' | 'boat' | 'cruise' | 'walk' | 'other'
 
 export interface Trip {
   id: string
@@ -43,9 +44,10 @@ export interface Spot {
 
 export interface Memory {
   id: string
-  locationId: string
+  locationId?: string
   tripId: string
   spotId?: string
+  routeId?: string
   type: MemoryType
   caption?: string
   externalUrl?: string
@@ -63,6 +65,8 @@ export interface Route {
   fromLocationId: string
   toLocationId: string
   order: number
+  transport?: TransportMode
+  caption?: string
 }
 
 export interface MediaBlob {
