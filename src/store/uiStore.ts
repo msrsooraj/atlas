@@ -1,7 +1,27 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-type Theme = 'dark' | 'light'
+export type Theme =
+  | 'dark'
+  | 'light'
+  | 'glass-atlas'
+  | 'dark-expedition'
+  | 'museum'
+  | 'memory-film'
+  | 'neo-terrain'
+  | 'atlas-os'
+
+export const THEMES: { id: Theme; name: string; dark: boolean; swatchBg: string; swatchAccent: string }[] = [
+  { id: 'dark',           name: 'Classic Dark',    dark: true,  swatchBg: '#0a0a0f', swatchAccent: '#f59e0b' },
+  { id: 'light',          name: 'Classic Light',   dark: false, swatchBg: '#f5f0e8', swatchAccent: '#c1440e' },
+  { id: 'glass-atlas',    name: 'Glass Atlas',     dark: true,  swatchBg: '#030508', swatchAccent: '#6BA3FF' },
+  { id: 'dark-expedition',name: 'Dark Expedition', dark: true,  swatchBg: '#0A0B0C', swatchAccent: '#E8621A' },
+  { id: 'museum',         name: 'Museum',          dark: false, swatchBg: '#F8F6F1', swatchAccent: '#1A3066' },
+  { id: 'memory-film',    name: 'Memory Film',     dark: true,  swatchBg: '#1A1510', swatchAccent: '#F07030' },
+  { id: 'neo-terrain',    name: 'Neo Terrain',     dark: false, swatchBg: '#FAFAFA', swatchAccent: '#0A0A08' },
+  { id: 'atlas-os',       name: 'Atlas OS',        dark: true,  swatchBg: '#111213', swatchAccent: '#4D9EFF' },
+]
+
 export type AppMode = 'scrapbook' | 'showcase' | 'album'
 export type HeatmapMode = 'none' | 'rating' | 'time' | 'aggregate'
 
@@ -36,7 +56,8 @@ export const useUIStore = create<UIState>()(
       heatmapMode: 'rating',
       heatmapScales: {},
       toggleTheme: () => {
-        const next = get().theme === 'dark' ? 'light' : 'dark'
+        const current = get().theme
+        const next = (current === 'dark' || THEMES.find(t => t.id === current)?.dark) ? 'light' : 'dark'
         set({ theme: next })
         document.documentElement.setAttribute('data-theme', next)
       },

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-/* Design tokens */
+/* ═══════════════════════════════════════════════════════════════
+   CLASSIC LIGHT (default / :root)
+═══════════════════════════════════════════════════════════════ */
 :root {
   --canvas-bg: #f5f0e8;
   --canvas-dot: rgba(0, 0, 0, 0.12);
@@ -21,8 +23,15 @@
   --radius-sm: 8px;
   --node-width: 280px;
   --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --blur-surface: blur(20px);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   CLASSIC DARK
+═══════════════════════════════════════════════════════════════ */
 [data-theme="dark"] {
   --canvas-bg: #0a0a0f;
   --canvas-dot: rgba(255, 255, 255, 0.08);
@@ -38,8 +47,442 @@
   --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --blur-surface: blur(20px);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   THEME 01 — GLASS ATLAS
+   Ultra-premium translucent cinematic dark UI
+═══════════════════════════════════════════════════════════════ */
+[data-theme="glass-atlas"] {
+  --canvas-bg: #030508;
+  --canvas-dot: rgba(255, 255, 255, 0.055);
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-raised: rgba(13, 19, 32, 0.88);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #F2F4F8;
+  --text-secondary: #8A94A8;
+  --text-muted: #444E62;
+  --accent: #6BA3FF;
+  --accent-soft: rgba(107, 163, 255, 0.12);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.36), 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-md: 0 8px 32px rgba(0,0,0,0.52), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.10);
+  --shadow-lg: 0 16px 56px rgba(0,0,0,0.60), 0 0 0 1px rgba(255,255,255,0.12), inset 0 1px 0 rgba(255,255,255,0.14);
+  --radius-node: 14px;
+  --radius-card: 12px;
+  --radius-sm: 8px;
+  --transition: 200ms cubic-bezier(0.22, 1.0, 0.36, 1.0);
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --blur-surface: blur(18px) saturate(150%);
+}
+
+/* Glass top-rim highlight on all raised surfaces */
+[data-theme="glass-atlas"] .react-flow__node > div {
+  position: relative;
+}
+
+[data-theme="glass-atlas"] .react-flow__background {
+  background: radial-gradient(ellipse at 50% 30%, rgba(15, 25, 60, 0.55) 0%, #030508 70%) !important;
+}
+
+[data-theme="glass-atlas"] .react-flow__edge-path {
+  stroke: rgba(107, 163, 255, 0.25);
+  stroke-width: 1.5;
+}
+
+[data-theme="glass-atlas"] .react-flow__edge.selected .react-flow__edge-path,
+[data-theme="glass-atlas"] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: rgba(107, 163, 255, 0.70);
+  filter: drop-shadow(0 0 4px rgba(107, 163, 255, 0.40));
+}
+
+/* Prismatic route animation */
+[data-theme="glass-atlas"] .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 8 5;
+  animation: glass-dash 3s linear infinite;
+}
+
+@keyframes glass-dash {
+  to { stroke-dashoffset: -52; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME 02 — DARK EXPEDITION
+   Satellite-noir, military-precision, monospace everything
+═══════════════════════════════════════════════════════════════ */
+[data-theme="dark-expedition"] {
+  --canvas-bg: #0A0B0C;
+  --canvas-dot: rgba(212, 192, 96, 0.07);
+  --surface: #171A1B;
+  --surface-raised: #1D2122;
+  --border: #252B2C;
+  --border-strong: #2E3436;
+  --text-primary: #E8E4DC;
+  --text-secondary: #8C8880;
+  --text-muted: #4A4844;
+  --accent: #E8621A;
+  --accent-soft: rgba(232, 98, 26, 0.14);
+  --shadow-sm: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.40);
+  --shadow-md: inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 16px rgba(0,0,0,0.50);
+  --shadow-lg: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 24px rgba(232,98,26,0.08), 0 8px 32px rgba(0,0,0,0.60);
+  --radius-node: 4px;
+  --radius-card: 4px;
+  --radius-sm: 3px;
+  --transition: 140ms cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --font-primary: 'IBM Plex Mono', 'Courier New', monospace;
+  --font-display: 'Barlow Condensed', 'IBM Plex Mono', monospace;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --blur-surface: none;
+}
+
+/* Kill backdrop-filter for this theme — opaque surfaces only */
+[data-theme="dark-expedition"] [style*="backdrop-filter"],
+[data-theme="dark-expedition"] [style*="backdropFilter"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Scan-line texture overlay */
+[data-theme="dark-expedition"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.055) 2px,
+    rgba(0, 0, 0, 0.055) 3px
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* Orange left-bar on selected nodes */
+[data-theme="dark-expedition"] .react-flow__node.selected .react-flow__node-memoryNode > div > div:last-child {
+  border-left: 3px solid #E8621A !important;
+}
+
+[data-theme="dark-expedition"] .react-flow__edge-path {
+  stroke: #2E3436;
+  stroke-dasharray: 4 4;
+}
+
+[data-theme="dark-expedition"] .react-flow__edge.selected .react-flow__edge-path,
+[data-theme="dark-expedition"] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #E8621A;
+  filter: drop-shadow(0 0 3px rgba(232, 98, 26, 0.50));
+}
+
+[data-theme="dark-expedition"] .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 4 4;
+  animation: expedition-dash 1.2s linear infinite;
+}
+
+@keyframes expedition-dash {
+  to { stroke-dashoffset: -16; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME 03 — MUSEUM
+   Gallery-white, Garamond display, institutional precision
+═══════════════════════════════════════════════════════════════ */
+[data-theme="museum"] {
+  --canvas-bg: #F8F6F1;
+  --canvas-dot: rgba(44, 36, 32, 0.07);
+  --surface: #F8F6F1;
+  --surface-raised: #F0EDE6;
+  --border: #D4CEC4;
+  --border-strong: #A8A098;
+  --text-primary: #2C2420;
+  --text-secondary: #6C6460;
+  --text-muted: #A8A098;
+  --accent: #1A3066;
+  --accent-soft: rgba(26, 48, 102, 0.08);
+  --shadow-sm: 0 1px 3px rgba(44,36,32,0.09), 0 4px 16px rgba(44,36,32,0.06);
+  --shadow-md: 0 2px 8px rgba(44,36,32,0.11), 0 8px 32px rgba(44,36,32,0.08);
+  --shadow-lg: 0 4px 16px rgba(44,36,32,0.15), 0 16px 48px rgba(44,36,32,0.10);
+  --radius-node: 3px;
+  --radius-card: 4px;
+  --radius-sm: 3px;
+  --transition: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  --blur-surface: none;
+}
+
+[data-theme="museum"] [style*="backdrop-filter"],
+[data-theme="museum"] [style*="backdropFilter"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Museum route lines: thin, institutional */
+[data-theme="museum"] .react-flow__edge-path {
+  stroke: #D4CEC4;
+  stroke-width: 1;
+  stroke-dasharray: none;
+}
+
+[data-theme="museum"] .react-flow__edge.selected .react-flow__edge-path,
+[data-theme="museum"] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #1A3066;
+  stroke-width: 1.5;
+}
+
+[data-theme="museum"] .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: none;
+  animation: none;
+}
+
+/* Museum canvas: warm gallery wall, no dot grid animation */
+[data-theme="museum"] .react-flow__background {
+  background: #F8F6F1 !important;
+}
+
+/* Node cards as exhibit prints — add mat/frame feel */
+[data-theme="museum"] .react-flow__node.selected .react-flow__node-memoryNode > div > div:last-child {
+  border-left: 2px solid #1A3066 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME 04 — MEMORY FILM
+   Analog darkroom, film grain, warm nostalgia
+═══════════════════════════════════════════════════════════════ */
+[data-theme="memory-film"] {
+  --canvas-bg: #1A1510;
+  --canvas-dot: rgba(160, 152, 128, 0.09);
+  --surface: #2A2318;
+  --surface-raised: #332B1E;
+  --border: rgba(160, 152, 128, 0.22);
+  --border-strong: rgba(160, 152, 128, 0.38);
+  --text-primary: #F2EDDF;
+  --text-secondary: #B0A080;
+  --text-muted: #6B5840;
+  --accent: #F07030;
+  --accent-soft: rgba(240, 112, 48, 0.14);
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.44), 0 4px 14px rgba(0,0,0,0.32);
+  --shadow-md: 0 4px 10px rgba(0,0,0,0.55), 0 8px 28px rgba(0,0,0,0.38);
+  --shadow-lg: 0 6px 20px rgba(0,0,0,0.65), 0 16px 48px rgba(0,0,0,0.45);
+  --radius-node: 3px;
+  --radius-card: 5px;
+  --radius-sm: 4px;
+  --transition: 240ms cubic-bezier(0.34, 1.15, 0.64, 1);
+  --font-primary: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-mono: 'Courier Prime', 'Courier New', Courier, monospace;
+  --blur-surface: blur(4px);
+}
+
+/* Film grain overlay */
+[data-theme="memory-film"] body::before {
+  content: '';
+  position: fixed;
+  inset: -100px;
+  width: calc(100% + 200px);
+  height: calc(100% + 200px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 250px 250px;
+  opacity: 0.038;
+  pointer-events: none;
+  z-index: 9997;
+  mix-blend-mode: overlay;
+  animation: film-grain 0.35s steps(2) infinite;
+}
+
+@keyframes film-grain {
+  0%   { transform: translate(0px, 0px); }
+  20%  { transform: translate(-4px, -8px); }
+  40%  { transform: translate(6px, -3px); }
+  60%  { transform: translate(-5px, 6px); }
+  80%  { transform: translate(4px, 5px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+/* Film canvas background: warm developer tray */
+[data-theme="memory-film"] .react-flow__background {
+  background: #1A1510 !important;
+}
+
+/* Film route lines: perforation style */
+[data-theme="memory-film"] .react-flow__edge-path {
+  stroke: rgba(160, 152, 128, 0.35);
+  stroke-dasharray: 3 5;
+}
+
+[data-theme="memory-film"] .react-flow__edge.selected .react-flow__edge-path,
+[data-theme="memory-film"] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #F07030;
+  filter: drop-shadow(0 0 4px rgba(240, 112, 48, 0.45));
+}
+
+[data-theme="memory-film"] .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 3 5;
+  animation: film-perf 0.8s linear infinite;
+}
+
+@keyframes film-perf {
+  to { stroke-dashoffset: -16; }
+}
+
+/* Card tilt — seeded via nth-child, gives analog "laid on table" feel */
+[data-theme="memory-film"] .react-flow__node:nth-child(3n+1) > div > div:last-child {
+  transform: rotate(0.8deg);
+}
+[data-theme="memory-film"] .react-flow__node:nth-child(3n+2) > div > div:last-child {
+  transform: rotate(-1.1deg);
+}
+[data-theme="memory-film"] .react-flow__node:nth-child(3n+3) > div > div:last-child {
+  transform: rotate(0.5deg);
+}
+[data-theme="memory-film"] .react-flow__node:hover > div > div:last-child,
+[data-theme="memory-film"] .react-flow__node.selected > div > div:last-child {
+  transform: rotate(0deg) !important;
+  transition: transform 220ms cubic-bezier(0.34, 1.15, 0.64, 1);
+}
+
+/* Orange film-edge on selected */
+[data-theme="memory-film"] .react-flow__node.selected .react-flow__node-memoryNode > div > div:last-child {
+  border-left: 3px solid #F07030 !important;
+  box-shadow: -2px 0 12px rgba(240, 112, 48, 0.25), var(--shadow-md) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME 05 — NEO TERRAIN
+   Apple-grade minimalism, monochromatic confidence
+═══════════════════════════════════════════════════════════════ */
+[data-theme="neo-terrain"] {
+  --canvas-bg: #FAFAFA;
+  --canvas-dot: rgba(0, 0, 0, 0.09);
+  --surface: #F2F2F0;
+  --surface-raised: #FFFFFF;
+  --border: #E4E4E0;
+  --border-strong: #CACAC6;
+  --text-primary: #0A0A08;
+  --text-secondary: #6E6E68;
+  --text-muted: #ACACAA;
+  --accent: #0A0A08;
+  --accent-soft: rgba(10, 10, 8, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.09), 0 0 0 1px rgba(0,0,0,0.05);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.11), 0 0 0 1px rgba(0,0,0,0.06);
+  --radius-node: 12px;
+  --radius-card: 12px;
+  --radius-sm: 8px;
+  --transition: 180ms cubic-bezier(0.0, 0.0, 0.2, 1);
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --blur-surface: blur(24px);
+}
+
+[data-theme="neo-terrain"] [style*="backdrop-filter"],
+[data-theme="neo-terrain"] [style*="backdropFilter"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="neo-terrain"] .react-flow__background {
+  background: #FAFAFA !important;
+}
+
+/* Route lines: clean vector, no animation at rest */
+[data-theme="neo-terrain"] .react-flow__edge-path {
+  stroke: #E4E4E0;
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+}
+
+[data-theme="neo-terrain"] .react-flow__edge.selected .react-flow__edge-path,
+[data-theme="neo-terrain"] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #0A0A08;
+  stroke-width: 2;
+}
+
+[data-theme="neo-terrain"] .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: none;
+  animation: none;
+}
+
+/* Selected: bold border only, no glow */
+[data-theme="neo-terrain"] .react-flow__node.selected .memory-node-card {
+  border: 2px solid #0A0A08 !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* Focus ring: black, precise */
+[data-theme="neo-terrain"] *:focus-visible {
+  outline: 2px solid #0A0A08;
+  outline-offset: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME 06 — ATLAS OS
+   Desktop OS metaphor, system-grade UI, command palette
+═══════════════════════════════════════════════════════════════ */
+[data-theme="atlas-os"] {
+  --canvas-bg: #111213;
+  --canvas-dot: rgba(255, 255, 255, 0.04);
+  --surface: #1E2022;
+  --surface-raised: #252829;
+  --border: #3A3E42;
+  --border-strong: #484C52;
+  --text-primary: #E8E9EA;
+  --text-secondary: #8E9298;
+  --text-muted: #54595E;
+  --accent: #4D9EFF;
+  --accent-soft: rgba(77, 158, 255, 0.13);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.36), 0 0 0 1px rgba(255,255,255,0.045);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.52), 0 0 0 1px rgba(255,255,255,0.055);
+  --shadow-lg: 0 32px 80px rgba(0,0,0,0.62), 0 8px 24px rgba(0,0,0,0.38), 0 0 0 1px rgba(255,255,255,0.06);
+  --radius-node: 10px;
+  --radius-card: 8px;
+  --radius-sm: 5px;
+  --transition: 180ms cubic-bezier(0.0, 0.0, 0.2, 1);
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --blur-surface: blur(24px) saturate(160%);
+}
+
+/* OS-style window titlebar on nodes */
+[data-theme="atlas-os"] .react-flow__node-memoryNode > div > div:last-child {
+  overflow: visible !important;
+}
+
+/* Route lines: network-connection style */
+[data-theme="atlas-os"] .react-flow__edge-path {
+  stroke: rgba(255, 255, 255, 0.10);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+[data-theme="atlas-os"] .react-flow__edge.selected .react-flow__edge-path,
+[data-theme="atlas-os"] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #4D9EFF;
+  filter: drop-shadow(0 0 4px rgba(77, 158, 255, 0.45));
+}
+
+[data-theme="atlas-os"] .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+  animation: os-flow 1.4s linear infinite;
+}
+
+@keyframes os-flow {
+  to { stroke-dashoffset: -20; }
+}
+
+/* Selected node: focused-window style */
+[data-theme="atlas-os"] .react-flow__node.selected .react-flow__node-memoryNode > div > div:last-child {
+  box-shadow: 0 0 0 1.5px #4D9EFF, 0 32px 80px rgba(0,0,0,0.65) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE STYLES
+═══════════════════════════════════════════════════════════════ */
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -54,12 +497,15 @@ html, body, #root {
 body {
   background: var(--canvas-bg);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  font-family: var(--font-primary);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background var(--transition), color var(--transition);
 }
 
-/* React Flow overrides */
+/* ═══════════════════════════════════════════════════════════════
+   REACT FLOW OVERRIDES
+═══════════════════════════════════════════════════════════════ */
 .react-flow__renderer {
   background: var(--canvas-bg) !important;
 }
@@ -100,10 +546,64 @@ body {
   box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-md) !important;
 }
 
-/* Scrollbar */
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
-/* Selection */
+/* ═══════════════════════════════════════════════════════════════
+   SELECTION
+═══════════════════════════════════════════════════════════════ */
 ::selection { background: var(--accent-soft); color: var(--text-primary); }
+
+/* ═══════════════════════════════════════════════════════════════
+   FOCUS
+═══════════════════════════════════════════════════════════════ */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME-SPECIFIC TYPOGRAPHY OVERRIDES
+   Applied to display text elements that should use --font-display
+═══════════════════════════════════════════════════════════════ */
+
+/* Museum: location/trip names in Garamond */
+[data-theme="museum"] h1,
+[data-theme="museum"] h2,
+[data-theme="museum"] .display-text {
+  font-family: var(--font-display);
+}
+
+/* Memory Film: captions and headings in Playfair */
+[data-theme="memory-film"] h1,
+[data-theme="memory-film"] h2,
+[data-theme="memory-film"] .display-text {
+  font-family: var(--font-display);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   @media: reduced motion
+═══════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="memory-film"] body::before {
+    animation: none;
+  }
+  [data-theme="dark-expedition"] .react-flow__edge.animated .react-flow__edge-path {
+    animation: none;
+  }
+  [data-theme="glass-atlas"] .react-flow__edge.animated .react-flow__edge-path {
+    animation: none;
+  }
+  [data-theme="memory-film"] .react-flow__node > div > div:last-child {
+    transform: none !important;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

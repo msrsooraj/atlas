@@ -118,6 +118,12 @@ export function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
+  // Sync on first mount (persisted store may differ from html default attr)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <HashRouter>
       <Routes>

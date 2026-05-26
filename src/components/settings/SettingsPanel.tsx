@@ -1,11 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { useUIStore } from '@/store/uiStore'
+import { useUIStore, THEMES, type Theme } from '@/store/uiStore'
 
 export function SettingsPanel() {
   const isOpen = useUIStore((s) => s.isSettingsPanelOpen)
   const close = useUIStore((s) => s.closeSettingsPanel)
   const theme = useUIStore((s) => s.theme)
-  const toggleTheme = useUIStore((s) => s.toggleTheme)
+  const setTheme = useUIStore((s) => s.setTheme)
   const showcaseShowPhotos = useUIStore((s) => s.showcaseShowPhotos)
   const toggleShowcasePhotos = useUIStore((s) => s.toggleShowcasePhotos)
 
@@ -19,14 +19,14 @@ export function SettingsPanel() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={close}
-            style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.40)', backdropFilter: 'blur(6px)' }}
           />
 
           <motion.div
             key="settings-panel"
-            initial={{ opacity: 0, scale: 0.95, y: -8 }}
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -8 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
             transition={{ type: 'spring', stiffness: 340, damping: 28 }}
             style={{
               position: 'fixed',
@@ -35,7 +35,7 @@ export function SettingsPanel() {
               transform: 'translate(-50%, -50%)',
               zIndex: 100,
               width: '100%',
-              maxWidth: 360,
+              maxWidth: 440,
               padding: '0 16px',
             }}
           >
@@ -50,7 +50,7 @@ export function SettingsPanel() {
                 boxShadow: 'var(--shadow-lg)',
               }}
             >
-              {/* Title row */}
+              {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--accent)' }}>
                   SETTINGS
@@ -75,19 +75,36 @@ export function SettingsPanel() {
                 </button>
               </div>
 
+              {/* Theme picker */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--text-muted)', marginBottom: 12 }}>
+                  VISUAL THEME
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 8,
+                  }}
+                >
+                  {THEMES.map((t) => (
+                    <ThemeSwatch
+                      key={t.id}
+                      name={t.name}
+                      bg={t.swatchBg}
+                      accent={t.swatchAccent}
+                      active={theme === t.id}
+                      onClick={() => setTheme(t.id as Theme)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: 'var(--border)', marginBottom: 16 }} />
+
               {/* Toggle list */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-
-                <SettingRow
-                  label="Dark mode"
-                  description="Switch between dark and light themes"
-                  icon={theme === 'dark'
-                    ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="2"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                  }
-                  active={theme === 'dark'}
-                  onToggle={toggleTheme}
-                />
 
                 <SettingRow
                   label="Showcase photos"
@@ -109,6 +126,113 @@ export function SettingsPanel() {
         </>
       )}
     </AnimatePresence>
+  )
+}
+
+function ThemeSwatch({
+  name,
+  bg,
+  accent,
+  active,
+  onClick,
+}: {
+  name: string
+  bg: string
+  accent: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <motion.button
+      whileHover={{ scale: 1.04 }}
+      whileTap={{ scale: 0.96 }}
+      onClick={onClick}
+      title={name}
+      style={{
+        background: 'none',
+        border: `2px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+        borderRadius: 10,
+        padding: 0,
+        cursor: 'pointer',
+        overflow: 'hidden',
+        transition: 'border-color var(--transition)',
+        position: 'relative',
+      }}
+    >
+      {/* Color preview */}
+      <div
+        style={{
+          height: 44,
+          background: bg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+          position: 'relative',
+        }}
+      >
+        {/* Mini node preview */}
+        <div style={{
+          width: 22,
+          height: 14,
+          borderRadius: 3,
+          border: `1px solid ${accent}`,
+          background: `${accent}22`,
+        }} />
+        <div style={{
+          width: 14,
+          height: 14,
+          borderRadius: 3,
+          border: `1px solid ${accent}`,
+          background: `${accent}22`,
+        }} />
+        {/* Accent dot */}
+        <div style={{
+          position: 'absolute',
+          bottom: 5,
+          right: 6,
+          width: 5,
+          height: 5,
+          borderRadius: '50%',
+          background: accent,
+        }} />
+        {/* Active checkmark */}
+        {active && (
+          <div style={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            width: 14,
+            height: 14,
+            borderRadius: '50%',
+            background: accent,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12l5 5L20 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
+      </div>
+      {/* Label */}
+      <div style={{
+        padding: '5px 4px 6px',
+        fontSize: '0.60rem',
+        fontWeight: active ? 700 : 500,
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
+        letterSpacing: '0.03em',
+        background: 'var(--surface)',
+        lineHeight: 1.2,
+        textAlign: 'center',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}>
+        {name}
+      </div>
+    </motion.button>
   )
 }
 
