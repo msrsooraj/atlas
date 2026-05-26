@@ -28,7 +28,8 @@ export interface TripLocation {
 
 export interface Spot {
   id: string
-  locationId: string
+  locationId?: string
+  routeId?: string
   tripId: string
   name: string
   caption?: string

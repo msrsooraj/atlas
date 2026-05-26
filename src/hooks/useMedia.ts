@@ -54,7 +54,7 @@ export function useMedia() {
 
   async function uploadFiles(
     files: File[],
-    locationId: string,
+    locationId: string | undefined,
     tripId: string,
     spotId?: string
   ): Promise<Memory[]> {

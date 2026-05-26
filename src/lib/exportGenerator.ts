@@ -40,7 +40,9 @@ async function collectTripData(tripId: string): Promise<ExportData | null> {
   }
 
   const spotsByLocation: Record<string, Spot[]> = {}
-  for (const s of spots) (spotsByLocation[s.locationId] ??= []).push(s)
+  for (const s of spots) {
+    if (s.locationId) (spotsByLocation[s.locationId] ??= []).push(s)
+  }
 
   const memoriesBySpot: Record<string, Memory[]> = {}
   for (const m of memories) {

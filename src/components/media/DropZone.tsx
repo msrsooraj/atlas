@@ -3,23 +3,28 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useMedia } from '@/hooks/useMedia'
 
 interface DropZoneProps {
-  locationId: string
+  locationId?: string
+  routeId?: string
   tripId: string
   spotId?: string
   onUploaded?: () => void
   compact?: boolean
 }
 
-export function DropZone({ locationId, tripId, spotId, onUploaded, compact }: DropZoneProps) {
+export function DropZone({ locationId, routeId, tripId, spotId, onUploaded, compact }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
-  const { uploadFiles } = useMedia()
+  const { uploadFiles, uploadRouteFiles } = useMedia()
 
   const handleFiles = async (files: File[]) => {
     if (!files.length) return
     setIsUploading(true)
     try {
-      await uploadFiles(files, locationId, tripId, spotId)
+      if (routeId && !spotId) {
+        await uploadRouteFiles(files, routeId, tripId)
+      } else {
+        await uploadFiles(files, locationId, tripId, spotId)
+      }
       onUploaded?.()
     } finally {
       setIsUploading(false)

@@ -24,6 +24,27 @@ export function useSpot() {
     return spot
   }
 
+  async function addRouteSpot(
+    routeId: string,
+    tripId: string,
+    name: string,
+    options?: { caption?: string; googlePlaceUrl?: string }
+  ): Promise<Spot> {
+    const existing = await db.spots.where('routeId').equals(routeId).count()
+    const spot: Spot = {
+      id: nanoid(),
+      routeId,
+      tripId,
+      name,
+      caption: options?.caption,
+      googlePlaceUrl: options?.googlePlaceUrl,
+      order: existing,
+      createdAt: Date.now(),
+    }
+    await db.spots.add(spot)
+    return spot
+  }
+
   async function updateSpot(
     spotId: string,
     updates: Partial<Pick<Spot, 'name' | 'caption' | 'googlePlaceUrl' | 'rating' | 'review' | 'dateFrom' | 'dateTo' | 'coverPhotoId'>>
@@ -43,5 +64,5 @@ export function useSpot() {
     })
   }
 
-  return { addSpot, updateSpot, deleteSpot }
+  return { addSpot, addRouteSpot, updateSpot, deleteSpot }
 }

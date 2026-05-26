@@ -344,6 +344,7 @@ export function SpotCard({ spot }: SpotCardProps) {
 
               <DropZone
                 locationId={spot.locationId}
+                routeId={spot.routeId}
                 tripId={spot.tripId}
                 spotId={spot.id}
                 compact

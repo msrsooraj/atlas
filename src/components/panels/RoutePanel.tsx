@@ -4,8 +4,10 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/db'
 import { useCanvasStore } from '@/store/canvasStore'
 import { useMedia } from '@/hooks/useMedia'
+import { useSpot } from '@/hooks/useSpot'
 import type { TransportMode } from '@/types/trip'
 import { TRANSPORT_ICONS } from '@/components/canvas/ConnectionEdge'
+import { SpotCard } from './SpotCard'
 
 const TRANSPORT_OPTIONS: { mode: TransportMode; label: string }[] = [
   { mode: 'flight',  label: 'Flight'  },
@@ -46,6 +48,11 @@ export function RoutePanel() {
       selectedRouteId
         ? db.memories.where('routeId').equals(selectedRouteId).filter((m) => m.type === 'photo').toArray()
         : [],
+    [selectedRouteId]
+  ) ?? []
+
+  const routeSpots = useLiveQuery(
+    () => selectedRouteId ? db.spots.where('routeId').equals(selectedRouteId).sortBy('order') : [],
     [selectedRouteId]
   ) ?? []
 
@@ -233,6 +240,25 @@ export function RoutePanel() {
                 }}
               />
 
+              {/* Stops along the way */}
+              <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 10 }}>
+                STOPS ALONG THE WAY
+              </div>
+
+              {routeSpots.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                  {routeSpots.map((spot) => (
+                    <SpotCard key={spot.id} spot={spot} />
+                  ))}
+                </div>
+              )}
+
+              {selectedRouteId && route && (
+                <AddRouteSpotRow routeId={selectedRouteId} tripId={route.tripId} />
+              )}
+
+              <div style={{ height: 20 }} />
+
               {/* Photo upload */}
               <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 8 }}>
                 TRANSIT PHOTOS
@@ -290,6 +316,134 @@ export function RoutePanel() {
       )}
     </AnimatePresence>
   )
+}
+
+function AddRouteSpotRow({ routeId, tripId }: { routeId: string; tripId: string }) {
+  const [isAdding, setIsAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const { addRouteSpot } = useSpot()
+
+  const save = async () => {
+    const trimmed = name.trim()
+    if (!trimmed || isSaving) return
+    setIsSaving(true)
+    try {
+      await addRouteSpot(routeId, tripId, trimmed, { googlePlaceUrl: url.trim() || undefined })
+      setName('')
+      setUrl('')
+      setIsAdding(false)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <AnimatePresence mode="wait">
+      {isAdding ? (
+        <motion.div
+          key="form"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div
+            style={{
+              border: '1px solid var(--border)', borderRadius: 10,
+              padding: 14, background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8,
+            }}
+          >
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+              NEW STOP
+            </div>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setIsAdding(false) }}
+              placeholder="e.g. Highway fuel stop, roadside café…"
+              style={addSpotFieldStyle}
+            />
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Google Maps URL (optional)"
+              style={addSpotFieldStyle}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setIsAdding(false)}
+                style={smallBtnStyle(false)}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={save}
+                disabled={!name.trim() || isSaving}
+                style={smallBtnStyle(true, !name.trim() || isSaving)}
+              >
+                {isSaving ? 'Adding…' : 'Add stop'}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      ) : (
+        <motion.button
+          key="btn"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setIsAdding(true)}
+          style={{
+            width: '100%', padding: '10px', background: 'none',
+            border: '1.5px dashed var(--border)', borderRadius: 10,
+            cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            transition: 'border-color var(--transition), color var(--transition)',
+          }}
+          onMouseEnter={(e) => {
+            ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
+            ;(e.currentTarget as HTMLElement).style.color = 'var(--accent)'
+          }}
+          onMouseLeave={(e) => {
+            ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'
+            ;(e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          Add a stop
+        </motion.button>
+      )}
+    </AnimatePresence>
+  )
+}
+
+const addSpotFieldStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 10px',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  color: 'var(--text-primary)',
+  fontSize: '0.84rem',
+  outline: 'none',
+}
+
+function smallBtnStyle(accent: boolean, disabled?: boolean): React.CSSProperties {
+  return {
+    padding: '6px 14px',
+    background: accent ? 'var(--accent)' : 'none',
+    border: `1px solid ${accent ? 'var(--accent)' : 'var(--border)'}`,
+    borderRadius: 99,
+    color: accent ? '#fff' : 'var(--text-secondary)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: '0.78rem',
+    fontWeight: accent ? 600 : 400,
+    opacity: disabled ? 0.4 : 1,
+  }
 }
 
 function PhotoThumb({ blobKey, onDelete }: { blobKey: string; onDelete: () => void }) {

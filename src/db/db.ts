@@ -33,6 +33,11 @@ class AtlasDB extends Dexie {
     this.version(3).stores({
       memories: 'id, locationId, spotId, routeId, tripId, type, createdAt',
     })
+
+    // v4: routeId index on spots (stops along a route)
+    this.version(4).stores({
+      spots: 'id, locationId, routeId, tripId, order',
+    })
   }
 }
 
